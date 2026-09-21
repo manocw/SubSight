@@ -86,7 +86,7 @@ python -m src.make_video --checkpoint checkpoints/best.pth --max-frames 100
 
 | Split (seed 42) | IoU | Dice | Notes |
 |---|---|---|---|
-| Val (Chunk0, 80/20 random) | _TODO_ | _TODO_ | U-Net resnet34, 256px, 20 epochs |
+| Val (Chunk0, 80/20 random, seed 42) | 0.7459 | 0.8368 | U-Net resnet34, 256px, 20 epochs (best epoch 12, 517 train / 130 val) |
 | Paper reference (SegFormer/DeepLabV3, SubPipeMini) | — | — | Paper reports IoU "with room for improvement"; compare qualitatively, not numerically (different split/data) |
 
 Example overlays (`outputs/eval_examples.png`, best row on top, worst at bottom):
@@ -101,7 +101,9 @@ first — the path above is where it lands.*
 - **Sand-covered / buried sections:** the pipe vanishes under sand (the dataset
   is a real outfall survey, not a clean tank). Expect the worst-IoU rows to be
   exactly these — partial occlusion means even humans labelled from
-  contrast-enhanced images. Treat low scores there as physics, not just bugs.
+  contrast-enhanced images. In our run the worst val frame scores IoU 0.0000
+  (a total miss on a buried/faint stretch). Treat low scores there as physics,
+  not just bugs.
 - **Blur, marine growth, lighting:** forward motion + turbidity + GoPro
   auto-exposure shift colours frame to frame; 256px resize also erases thin
   edges. Hue/brightness augments help but do not fix genuinely invisible pipe.
@@ -144,7 +146,7 @@ SubPipe/
 
 - [x] Stages 1–5: skeleton → dataset → U-Net → training → eval figures
 - [x] Stage 6: this README (results table = your numbers)
-- [ ] Verify mask encoding on YOUR download, paste unique values into results
+- [x] Verify mask encoding on YOUR download (found {0,1,128} + RGB-red variants)
 - [ ] Chronological split + test on Chunk1 (honest generalisation check)
 - [ ] SegFormer swap (`pip install transformers`, `architecture: segformer`)
 - [ ] Larger input (512px) / longer schedule once the baseline is defended
