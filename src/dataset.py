@@ -16,12 +16,12 @@ Classes (from the SubPipe paper, Alvarez-Tunon et al. 2024):
     - background (seabed, water, sand) vs. `pipeline` (pipe + clamp as ONE class).
     - So this is BINARY segmentation: 1 foreground class.
 
-Pixel encoding — VERIFY on your data (Stage 2 inspection script):
-    - The repo/paper do NOT document exact values. LabelMe masks are
-      usually 0 = background, 255 = pipe (sometimes 0/1).
-    - The code below accepts BOTH: anything > 1 is divided by 255,
-      then thresholded at 0.5. Run notebooks/inspect_masks.py and
-      check the printed "unique values" to confirm.
+Pixel encoding — VERIFIED on real Chunk0 data (Stage 2 inspection):
+    masks hold exactly THREE values: 0 = background (87.98% of pixels),
+    1 = pipe body (10.47%), 128 = pipe boundary (~1.56%, hugs the pipe
+    edges — confirm on outputs/mask_values.png). There is NO 255 encoding.
+    `decode_mask()` below maps this explicitly and FAILS LOUD on anything
+    unexpected, instead of a silent threshold that would corrupt training.
 """
 
 import random
@@ -33,6 +33,36 @@ import numpy as np
 import torch
 from albumentations.pytorch import ToTensorV2
 from torch.utils.data import DataLoader, Dataset
+
+
+# ---------------------------------------------------------------------------
+# Mask decoding — the ONLY place raw pixel values are interpreted
+# ---------------------------------------------------------------------------
+PIPE_VALUE = 1
+BOUNDARY_VALUE = 128
+# Boundary pixels ARE pipe edge, so they train as pipe. Flip to False only
+# if your mask_values.png shows 128 somewhere other than pipe edges.
+BOUNDARY_AS_PIPE = True
+
+
+def decode_mask(raw: np.ndarray) -> np.ndarray:
+    """Raw SubPipe mask (values {0, 1, 128}) -> binary {0.0, 1.0} float32.
+
+    Explicit mapping beats a threshold: a threshold can't tell "pipe=1"
+    from "background", and it silently passes new values through. This
+    raises ValueError on anything outside {0, 1, 128} so a changed encoding
+    (e.g. a new chunk with 255s) stops loudly instead of training wrong.
+    """
+    unexpected = set(np.unique(raw).tolist()) - {0, PIPE_VALUE, BOUNDARY_VALUE}
+    if unexpected:
+        raise ValueError(
+            f"Unexpected mask values {sorted(unexpected)}. "
+            "Encoding changed? Update PIPE_VALUE/BOUNDARY_VALUE above."
+        )
+    mask = (raw == PIPE_VALUE).astype(np.float32)
+    if BOUNDARY_AS_PIPE:
+        mask[raw == BOUNDARY_VALUE] = 1.0
+    return mask
 
 
 # ---------------------------------------------------------------------------
@@ -100,16 +130,9 @@ class SubPipeSegDataset(Dataset):
         image = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-        # Mask as grayscale: shape (H, W), values e.g. {0, 255} or {0, 1}.
-        mask = cv2.imread(str(mask_path), cv2.IMREAD_GRAYSCALE)
-
-        # Normalise to {0.0, 1.0}: handles both 0/255 and 0/1 encodings.
-        # VERIFY with inspect_masks.py — if you see values like {0, 128, 255},
-        # stop: that would mean multi-class and this threshold is wrong.
-        if mask.max() > 1:
-            mask = (mask / 255.0 > 0.5).astype(np.float32)
-        else:
-            mask = (mask > 0.5).astype(np.float32)
+        # Mask as grayscale (H, W), then explicit decode to {0.0, 1.0}.
+        # See decode_mask(): {0: background, 1: pipe, 128: pipe boundary}.
+        mask = decode_mask(cv2.imread(str(mask_path), cv2.IMREAD_GRAYSCALE))
 
         if self.transform is not None:
             sample = self.transform(image=image, mask=mask)

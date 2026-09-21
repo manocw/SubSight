@@ -30,8 +30,10 @@ aiming for subsea engineering — every stage is small, commented, and defensibl
 - Scope here: **Chunk0, `Segmentation/` only** — `<timestamp>.png` images with
   `<timestamp>_label.png` masks. Classes: single foreground class `pipeline`
   (pipe body + clamp as one class) vs background = binary segmentation.
-  Pixel encoding is verified locally with `notebooks/inspect_masks.py`
-  (expect 0/255 or 0/1; the loader accepts both — report your "unique values").
+  Pixel encoding, verified on real data: masks hold exactly {0, 1, 128} =
+  background (88%) / pipe body (10.5%) / pipe boundary (1.5%, trained as
+  pipe). `src/dataset.py::decode_mask` maps this explicitly and raises on
+  anything unexpected.
 
 ## Method
 

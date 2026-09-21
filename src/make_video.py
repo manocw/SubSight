@@ -24,6 +24,7 @@ import torch
 import yaml
 
 from src.dataset import (
+    decode_mask,
     find_pairs,
     get_val_transforms,
     train_val_split,
@@ -98,8 +99,7 @@ def main() -> None:
 
     for img_path, mask_path in val_pairs:
         img_bgr = cv2.imread(str(img_path), cv2.IMREAD_COLOR)
-        gt = cv2.imread(str(mask_path), cv2.IMREAD_GRAYSCALE)
-        gt = (gt / 255.0 > 0.5) if gt.max() > 1 else (gt > 0.5)
+        gt = decode_mask(cv2.imread(str(mask_path), cv2.IMREAD_GRAYSCALE))
         rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
         sample = transform(image=rgb, mask=gt.astype(np.float32))
         logits = model(sample["image"][None].to(device))
