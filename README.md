@@ -134,6 +134,17 @@ you can track kilometres of it, pick out buried or spanning sections, measure
 drift, and send humans only the hard frames. This is that first step, built
 on real survey data, misses included.
 
+## How I worked
+
+Openly: I didn't type every line alone. I directed an AI coding assistant
+stage by stage (skeleton, dataset, model, training, eval, writeup) and it
+drafted the code. I ran every cell myself on Colab, read every output, and
+made the calls. The mask saga was the real work: the {0,1,128} encoding, the
+palette PNGs reading as grey 38, the red-channel RGB masks. The agent
+suggested, I diagnosed, we fixed, I verified. The numbers above come from my
+runs and I can walk through any file line by line. That was the point of
+building in stages.
+
 ## Repo layout
 
 ```text
