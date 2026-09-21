@@ -71,6 +71,10 @@ python -m src.train --config configs/config.yaml
 # 3. Evaluate + figures
 python -m src.evaluate --checkpoint checkpoints/best.pth --num-images 6
 # -> prints mean IoU/Dice, saves outputs/eval_examples.png
+
+# 4. Prediction video (val frames in timestamp order, raw | overlay)
+python -m src.make_video --checkpoint checkpoints/best.pth --max-frames 100
+# -> outputs/pred_video.mp4 (green = truth, red = prediction, IoU stamped)
 ```
 
 ## Results
