@@ -1,0 +1,27 @@
+# Single source of truth for hyperparameters.
+# Stage 1: values are provisional — we will confirm image size,
+# batch size, and split AFTER inspecting Chunk0 in Stage 2.
+
+data:
+  root: "data/Chunk0/Segmentation"  # image + <timestamp>_label.png pairs live here
+  image_size: [256, 256]            # resize for Colab free-GPU memory (revisit Stage 2)
+  train_split: 0.8                  # 80% train / 20% val, stratified if classes allow
+  num_workers: 2
+  seed: 42
+
+model:
+  architecture: "unet"              # segmentation-models-pytorch name
+  encoder: "resnet34"               # light, pretrained on ImageNet, good Colab default
+  encoder_weights: "imagenet"       # transfer learning: reuse visual features
+  in_channels: 3
+  classes: 1                        # binary pipe vs background (Stage 2: paper confirms
+                                    # single 'pipeline' class; verify 0/255 vs 0/1 via inspect script)
+  # Future swap path (Stage 3): segformer via HuggingFace transformers.
+  # Interface will stay: model_fn(num_classes) -> nn.Module.
+
+train:
+  batch_size: 8                     # fits T4 free GPU at 256x256
+  epochs: 20
+  lr: 0.0003
+  checkpoint_dir: "checkpoints"
+  best_metric: "val_iou"            # save best checkpoint on this

@@ -1,0 +1,21 @@
+# --- PyTorch + training ---
+torch>=2.2
+torchvision>=0.17
+
+# --- Segmentation model library (U-Net + pretrained encoders) ---
+segmentation-models-pytorch>=0.3.4
+timm>=0.9.0
+
+# --- Data handling / augmentation / vision ---
+albumentations>=1.4.0
+opencv-python-headless>=4.9.0
+Pillow>=10.0.0
+numpy>=1.26.0
+
+# --- Training utilities ---
+pyyaml>=6.0
+tqdm>=4.66.0
+matplotlib>=3.8.0
+
+# NOTE: transformers (for SegFormer later) is intentionally NOT
+# installed yet. We'll add it at Stage 3 so you can defend U-Net first.
