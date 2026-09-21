@@ -32,6 +32,7 @@ import cv2
 import numpy as np
 import torch
 from albumentations.pytorch import ToTensorV2
+from PIL import Image
 from torch.utils.data import DataLoader, Dataset
 
 
@@ -52,6 +53,11 @@ def decode_mask(raw: np.ndarray) -> np.ndarray:
     from "background", and it silently passes new values through. This
     raises ValueError on anything outside {0, 1, 128} so a changed encoding
     (e.g. a new chunk with 255s) stops loudly instead of training wrong.
+
+    IMPORTANT: pass RAW indices (PIL), not cv2 output. These masks are
+    palette-mode PNGs: PIL returns indices {0,1,128}, but cv2 expands the
+    palette and grayscales, turning index 1 into grey ~38. Same file,
+    two readings — always PIL here.
     """
     unexpected = set(np.unique(raw).tolist()) - {0, PIPE_VALUE, BOUNDARY_VALUE}
     if unexpected:
@@ -84,9 +90,15 @@ def find_pairs(root: str | Path) -> list[tuple[Path, Path]]:
         )
     pairs: list[tuple[Path, Path]] = []
     for mask_path in mask_paths:
-        # e.g. 168070..._label.png -> 168070....png
-        image_path = mask_path.with_name(mask_path.name.replace("_label", ""))
-        if not image_path.exists():
+        # Mask e.g. 1693573934.247_label.png -> image 1693573934.247.<ext>.
+        # Images are mixed .png AND .jpg in SubPipeMini, so try the mask's
+        # own suffix first, then common photo suffixes.
+        stem = mask_path.name[: -len("_label" + mask_path.suffix)]
+        candidates = [mask_path.with_name(stem + ext)
+                      for ext in dict.fromkeys(
+                          [mask_path.suffix, ".png", ".jpg", ".jpeg"])]
+        image_path = next((c for c in candidates if c.exists()), None)
+        if image_path is None:
             print(f"[warn] mask without image, skipping: {mask_path.name}")
             continue
         pairs.append((image_path, mask_path))
@@ -130,9 +142,16 @@ class SubPipeSegDataset(Dataset):
         image = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-        # Mask as grayscale (H, W), then explicit decode to {0.0, 1.0}.
-        # See decode_mask(): {0: background, 1: pipe, 128: pipe boundary}.
-        mask = decode_mask(cv2.imread(str(mask_path), cv2.IMREAD_GRAYSCALE))
+        # Mask via PIL (NOT cv2): palette-mode PNGs must stay raw indices.
+        # See decode_mask() docstring for why cv2 corrupts them.
+        # Decoded to {0.0: background, 1.0: pipe incl. boundary}.
+        with Image.open(mask_path) as im:
+            if im.mode not in ("L", "P"):
+                im = im.convert("L")  # RGB/RGBA mask -> luminance, then decode
+            raw = np.array(im)
+        if raw.ndim == 3:  # safety net, should not happen
+            raw = raw[..., 0]
+        mask = decode_mask(raw)
 
         if self.transform is not None:
             sample = self.transform(image=image, mask=mask)

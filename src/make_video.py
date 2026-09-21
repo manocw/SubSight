@@ -22,6 +22,7 @@ import cv2
 import numpy as np
 import torch
 import yaml
+from PIL import Image
 
 from src.dataset import (
     decode_mask,
@@ -99,7 +100,8 @@ def main() -> None:
 
     for img_path, mask_path in val_pairs:
         img_bgr = cv2.imread(str(img_path), cv2.IMREAD_COLOR)
-        gt = decode_mask(cv2.imread(str(mask_path), cv2.IMREAD_GRAYSCALE))
+        with Image.open(mask_path) as im:  # PIL: keep palette indices raw
+            gt = decode_mask(np.array(im.convert("L") if im.mode not in ("L", "P") else im))
         rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
         sample = transform(image=rgb, mask=gt.astype(np.float32))
         logits = model(sample["image"][None].to(device))
