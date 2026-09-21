@@ -71,6 +71,36 @@ def decode_mask(raw: np.ndarray) -> np.ndarray:
     return mask
 
 
+def read_mask_raw(mask_path: str | Path) -> np.ndarray:
+    """Open a mask file -> single-channel raw array, whatever its PNG mode.
+
+    Verified on real data — three flavours exist (523 P / 18 L / 106 RGB):
+      - P / L: palette indices / grey levels, values {0, 1, 128} = bg / pipe
+        body / pipe boundary. Returned as-is.
+      - RGB: annotation stored in the RED channel only (G and B all zero,
+        R in {0, 128} with pipe body+boundary merged into 128). Red channel
+        returned, so decode_mask() maps it to pipe via BOUNDARY_AS_PIPE.
+    Anything else (e.g. RGB with non-zero green/blue) raises loudly instead
+    of being misread — print the file's per-channel uniques and extend here.
+    """
+    with Image.open(mask_path) as im:
+        mode = im.mode
+        if mode in ("L", "P"):
+            return np.array(im)
+        if mode in ("RGB", "RGBA"):
+            a = np.array(im)[..., :3]  # drop alpha if present
+            if a[..., 1].any() or a[..., 2].any():
+                raise ValueError(
+                    f"{mask_path}: RGB mask with non-zero G/B channels. "
+                    "Annotation layout unknown — inspect per-channel uniques."
+                )
+            return a[..., 0]  # red channel holds {0, 128}
+    raise ValueError(
+        f"{mask_path}: unsupported mask mode {mode}. "
+        "Add a branch to read_mask_raw()."
+    )
+
+
 # ---------------------------------------------------------------------------
 # 1. Pair discovery
 # ---------------------------------------------------------------------------
@@ -142,16 +172,10 @@ class SubPipeSegDataset(Dataset):
         image = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-        # Mask via PIL (NOT cv2): palette-mode PNGs must stay raw indices.
-        # See decode_mask() docstring for why cv2 corrupts them.
+        # Mask via read_mask_raw (PIL, mode-aware — NEVER cv2: palette-mode
+        # PNGs get palette-expanded and grayscaled by cv2, corrupting indices).
         # Decoded to {0.0: background, 1.0: pipe incl. boundary}.
-        with Image.open(mask_path) as im:
-            if im.mode not in ("L", "P"):
-                im = im.convert("L")  # RGB/RGBA mask -> luminance, then decode
-            raw = np.array(im)
-        if raw.ndim == 3:  # safety net, should not happen
-            raw = raw[..., 0]
-        mask = decode_mask(raw)
+        mask = decode_mask(read_mask_raw(mask_path))
 
         if self.transform is not None:
             sample = self.transform(image=image, mask=mask)
