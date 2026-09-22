@@ -79,17 +79,27 @@ def build_model(
         # image at once (global context: long straight pipe), where U-Net
         # sees mostly local neighbourhoods. Paper trained it from scratch.
         try:
-            from transformers import SegformerForSemanticSegmentation
+            from transformers import (
+                SegformerConfig,
+                SegformerForSemanticSegmentation,
+            )
         except ImportError as exc:
             raise ImportError(
                 "You selected architecture='segformer' but `transformers` "
                 "is not installed. Run `pip install transformers` first "
                 "(kept out of requirements.txt until you defend U-Net)."
             ) from exc
-        hf_model = SegformerForSemanticSegmentation.from_pretrained(
-            "nvidia/segformer-b0-finetuned-ade-512-224",
-            num_labels=1,  # binary: one logit, same as U-Net above
-        )
+        if encoder_weights is None:
+            # From scratch, like the paper. Needs no download, so it
+            # works when the HF checkpoint is gated or offline.
+            hf_model = SegformerForSemanticSegmentation(
+                SegformerConfig(num_labels=1)  # binary: one logit
+            )
+        else:
+            hf_model = SegformerForSemanticSegmentation.from_pretrained(
+                "nvidia/segformer-b0-finetuned-ade-512-224",
+                num_labels=1,  # binary: one logit, same as U-Net above
+            )
         # HuggingFace returns (B,1,H/4,W/4) logits + dict wrapper; unwrap and
         # upsample to full resolution so the rest of the code is unchanged.
         return _HFLogitWrapper(hf_model)
