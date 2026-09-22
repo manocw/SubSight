@@ -69,6 +69,8 @@ def main() -> None:
                     help="Override config root, e.g. data/Chunk1/Segmentation.")
     ap.add_argument("--full-chunk", action="store_true",
                     help="Score every frame in data-root, no split.")
+    ap.add_argument("--test-split", action="store_true",
+                    help="Score the locked chrono test split (never trained on).")
     args = ap.parse_args()
 
     ckpt = torch.load(args.checkpoint, map_location="cpu")
@@ -104,6 +106,19 @@ def main() -> None:
         )
         print(f"Cross-chunk eval: full chunk in {eval_root} "
               "(no retrain).")
+    elif args.test_split:
+        from torch.utils.data import DataLoader
+        from src.dataset import (SubPipeSegDataset, chronological_split,
+                                 find_pairs, get_val_transforms)
+        _, _, test_pairs = chronological_split(find_pairs(eval_root))
+        val_loader = DataLoader(
+            SubPipeSegDataset(test_pairs,
+                              get_val_transforms(tuple(cfg["data"]["image_size"]))),
+            batch_size=cfg["train"]["batch_size"], shuffle=False,
+            num_workers=cfg["data"]["num_workers"],
+        )
+        print(f"Locked test split: {len(test_pairs)} frames in {eval_root} "
+              "(never trained on, score once).")
     else:
         _, val_loader = get_dataloaders(
             root=eval_root,
