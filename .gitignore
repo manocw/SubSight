@@ -16,9 +16,10 @@ checkpoints/*.pth
 checkpoints/*.pt
 tasks/*/checkpoints/*.pth
 tasks/*/checkpoints/*.pt
-outputs/
-tasks/*/outputs/
+outputs/*
 !outputs/eval_examples.png
+tasks/*/outputs/*
+!tasks/*/outputs/eval_examples.png
 *.log
 
 # Notebooks / Colab
