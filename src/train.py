@@ -148,10 +148,13 @@ def main() -> None:
         root=cfg["data"]["root"],
         image_size=tuple(cfg["data"]["image_size"]),
         batch_size=cfg["train"]["batch_size"],
-        train_ratio=cfg["data"]["train_split"],
+        train_ratio=cfg["data"].get("train_split", 0.8),
         num_workers=cfg["data"]["num_workers"],
         seed=seed,
+        split=cfg["data"].get("split", "random"),
     )
+    print(f"Split mode: {cfg['data'].get('split', 'random')} "
+          "(chrono=timestamp order 60/20/20, test locked).")
 
     model = build_model(
         architecture=cfg["model"].get("architecture", "unet"),

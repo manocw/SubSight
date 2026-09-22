@@ -1,3 +1,6 @@
+# SubSight: live inspection toolkit for small underwater scanners
+Pipe segmentation runs now on public AUV survey data. Hull defect, sonar, enhancement and edge export follow in phases.
+
 # Finding a subsea pipeline with a neural net
 
 I'm a first-year mechanical engineering student and I want to work in subsea
@@ -28,7 +31,7 @@ Download: https://zenodo.org/doi/10.5281/zenodo.10053564 (I used
 Paper: Alvarez-Tunon et al., *SubPipe: A Submarine Pipeline Inspection
 Dataset for Segmentation and Visual-inertial Localization* (arXiv:2401.17907)
 
-The data is GPL-3.0 and stays out of git. If you reuse it, include this:
+The data is CC-BY-4.0 per its Zenodo record and stays out of git. If you reuse it, include this:
 SubPipe is a public dataset of a submarine outfall pipeline, property of
 Oceanscan-MST. This dataset was acquired with a Light Autonomous Underwater
 Vehicle by Oceanscan-MST, within the scope of Challenge Camp 1 of the H2020
@@ -89,6 +92,12 @@ python -m src.evaluate --checkpoint checkpoints/best.pth --num-images 6
 # 4. Prediction video (val frames back in timestamp order, raw next to overlay)
 python -m src.make_video --checkpoint checkpoints/best.pth --max-frames 100
 # -> outputs/pred_video.mp4 (green = human label, red = model, IoU stamped)
+
+# 5. Phase 1 honest splits (Colab T4, 256px, seed 42, no test leakage)
+# chrono retrain: set `split: chrono` in configs/config.yaml, then rerun step 2
+# cross-chunk score (same Chunk0 weights, no retrain):
+python -m src.evaluate --checkpoint checkpoints/best.pth --data-root data/Chunk1/Segmentation --full-chunk
+# repeat for Chunk2, Chunk3, Chunk4 and fill the Phase 1 gate table
 ```
 
 ## Results
@@ -98,7 +107,31 @@ python -m src.make_video --checkpoint checkpoints/best.pth --max-frames 100
 | Val (Chunk0, 80/20 random, seed 42) | 0.7459 | 0.8368 | U-Net resnet34, 256px, 20 epochs (best epoch 12, 517 train / 130 val) |
 | Paper reference (SegFormer/DeepLabV3, SubPipeMini) | — | — | The paper says IoU has "room for improvement". Don't compare numbers directly, different split and data. |
 
-0.75 on murky water with a tiny baseline. I'll take it.
+0.75 on murky water with a tiny baseline. I'll take it. One caveat stays: random split on sequential video frames flatters the score via temporal correlation. Neighbours look alike, so val shares scenes with train. Phase 1 gate below fixes that read.
+
+Phase 1 gate (same weights logic, honest splits, no test leakage):
+
+| Test | IoU | Dice | Notes |
+|---|---|---|---|
+| Chunk0 random 80/20 | 0.7459 | 0.8368 | Baseline above, locked in tag v1-subpipe-baseline |
+| Chunk0 chrono 60/20/20 val | TBC | TBC | Set `split: chrono` in config, retrain on Colab T4, test stays locked |
+| Chunk0 chrono held-out test | TBC | TBC | Score once, never train on it |
+| Chunk1 full chunk | TBC | TBC | Same Chunk0 weights, `--full-chunk`, no retrain |
+| Chunk2 full chunk | TBC | TBC | Same as above |
+| Chunk3 full chunk | TBC | TBC | Same as above |
+| Chunk4 full chunk | TBC | TBC | Same as above |
+
+Gate passes when the table is full and the drop from random to chrono to cross-chunk is reported as is. SegFormer comparison runs at 256px on the chrono split before any 512px run. No 512px until the 256px baseline is defended.
+
+All tasks (one repo, one toolkit):
+
+| Task | Data | Status | Score |
+|---|---|---|---|
+| pipe-seg | SubPipe Chunk0 | Baseline done, Phase 1 hardening in progress | Val IoU 0.7459 / Dice 0.8368 (random, optimistic) |
+| hull-defect | LIACI (TBC licence) | Spec only, see SPEC.md | — |
+| sonar | SubPipe SSS or UATD (TBC licence) | Spec only, see SPEC.md | — |
+| enhance | UIEB + EUVP (TBC licence) | Spec only, see SPEC.md | — |
+| edge + demo | Jetson Orin Nano + UCL tow tank | Spec only, see SPEC.md | Latency vs accuracy curve TBC |
 
 Overlays (`outputs/eval_examples.png`, best row first, worst last):
 
@@ -148,27 +181,32 @@ building in stages.
 ## Repo layout
 
 ```text
-SubPipe/
-├── configs/config.yaml      # every hyperparameter lives here
+SubSight/ (renamed from SubPipe, old URL redirects, tag v1-subpipe-baseline locks the baseline)
+├── configs/config.yaml      # every hyperparameter lives here, now with split: random/chrono
 ├── data/README.md           # where Chunk0 comes from (data itself not in git)
 ├── notebooks/inspect_masks.py  # look at the masks before trusting them
 ├── src/
-│   ├── dataset.py           # pairs, split, augments, loaders, mask decoding
+│   ├── dataset.py           # pairs, random + chrono splits, full-chunk loader, mask decoding
 │   ├── model.py             # U-Net, plus the SegFormer door left open
 │   ├── train.py             # loss, IoU/Dice, val loop, checkpointing
-│   ├── evaluate.py          # scores + best-to-worst overlay pictures
+│   ├── evaluate.py          # scores + best-to-worst overlays, plus --data-root/--full-chunk
 │   ├── make_video.py        # val frames as raw-next-to-overlay video
 │   └── utils.py             # seeds
+├── SPEC.md                  # phases 2 to 5: data links, budget, tank demo plan
 ├── checkpoints/             # best.pth / last.pth (gitignored, too big anyway)
-├── outputs/                 # pictures + video (gitignored, except the README figure)
+├── outputs/                 # pictures + video (gitignored, except eval_examples.png)
 └── requirements.txt         # Colab-safe deps
 ```
+
+Move to `tasks/pipe-seg/` happens after the Phase 1 gate table is full. History moves with `git mv`, logic stays put. No new task folders until then.
 
 ## Next
 
 - [x] Stages 1-5: skeleton, dataset, U-Net, training, pictures
 - [x] Stage 6: this writeup with real numbers
 - [x] Mask encoding saga: {0,1,128} plus red-channel RGB variants, all handled
-- [ ] Chronological split + Chunk1 test
-- [ ] SegFormer swap (`pip install transformers`, `architecture: segformer`)
+- [x] Baseline locked: tag v1-subpipe-baseline pushed, repo renamed SubPipe to SubSight
+- [x] Chrono + cross-chunk code: `split: chrono` in config, `--data-root`/`--full-chunk` in eval
+- [ ] Phase 1 gate: fill chrono + Chunk1-4 rows on Colab T4, report the drop
+- [ ] SegFormer swap at 256px on chrono (`pip install transformers`, `architecture: segformer`)
 - [ ] 512px inputs once the baseline is defended

@@ -28,7 +28,7 @@ import numpy as np
 import torch
 import yaml
 
-from src.dataset import get_dataloaders
+from src.dataset import get_dataloaders, get_full_loader
 from src.model import build_model
 from src.train import dice_score, iou_score
 
@@ -65,6 +65,10 @@ def main() -> None:
     ap.add_argument("--out", default="outputs/eval_examples.png")
     ap.add_argument("--thresh", type=float, default=0.5,
                     help="sigmoid threshold for pipe/no-pipe.")
+    ap.add_argument("--data-root", default=None,
+                    help="Override config root, e.g. data/Chunk1/Segmentation.")
+    ap.add_argument("--full-chunk", action="store_true",
+                    help="Score every frame in data-root, no split.")
     args = ap.parse_args()
 
     ckpt = torch.load(args.checkpoint, map_location="cpu")
@@ -89,14 +93,27 @@ def main() -> None:
 
     # Same seed => same val images Stage 4 validated on. Shuffle=False so
     # row i in the figure is a reproducible sample, not random.
-    _, val_loader = get_dataloaders(
-        root=cfg["data"]["root"],
-        image_size=tuple(cfg["data"]["image_size"]),
-        batch_size=cfg["train"]["batch_size"],
-        train_ratio=cfg["data"]["train_split"],
-        num_workers=cfg["data"]["num_workers"],
-        seed=seed,
-    )
+    # --data-root + --full-chunk scores a fresh chunk with no retrain.
+    eval_root = args.data_root or cfg["data"]["root"]
+    if args.full_chunk:
+        val_loader, _ = get_full_loader(
+            root=eval_root,
+            image_size=tuple(cfg["data"]["image_size"]),
+            batch_size=cfg["train"]["batch_size"],
+            num_workers=cfg["data"]["num_workers"],
+        )
+        print(f"Cross-chunk eval: full chunk in {eval_root} "
+              "(no retrain).")
+    else:
+        _, val_loader = get_dataloaders(
+            root=eval_root,
+            image_size=tuple(cfg["data"]["image_size"]),
+            batch_size=cfg["train"]["batch_size"],
+            train_ratio=cfg["data"].get("train_split", 0.8),
+            num_workers=cfg["data"]["num_workers"],
+            seed=seed,
+            split=cfg["data"].get("split", "random"),
+        )
 
     # --- Score the whole val set, keeping per-image IoU for the figure ---
     all_ious, all_dices, saved = [], [], []

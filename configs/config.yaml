@@ -5,7 +5,8 @@
 data:
   root: "data/Chunk0/Segmentation"  # image + <timestamp>_label.png pairs live here
   image_size: [256, 256]            # resize for Colab free-GPU memory (revisit Stage 2)
-  train_split: 0.8                  # 80% train / 20% val, stratified if classes allow
+  train_split: 0.8                  # used when split is random
+  split: "random"                   # random = 80/20 baseline; chrono = 60/20/20 timestamp order
   num_workers: 2
   seed: 42
 

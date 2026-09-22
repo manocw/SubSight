@@ -11,7 +11,7 @@
 #            <timestamp>_label.png    <- mask (Stage 2 will decode classes)
 #
 # 3. Do NOT commit raw data to git (see ../.gitignore). It is large and
-#    licensed GPL-3.0 — check the Zenodo page for reuse/citation rules.
+#    licensed CC-BY-4.0 — check the Zenodo page for reuse/citation rules.
 #
 # 4. Colab tip: upload Chunk0 to Google Drive once, then mount it:
 #

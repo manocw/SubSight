@@ -211,6 +211,28 @@ def train_val_split(
     return shuffled[:n_train], shuffled[n_train:]
 
 
+def chronological_split(
+    pairs: list[tuple[Path, Path]],
+    train_ratio: float = 0.6,
+    val_ratio: float = 0.2,
+) -> tuple[list, list, list]:
+    """Split by timestamp order: filenames sort as video order.
+
+    Paper setup is 60/20/20 train/val/test. Test stays locked: train
+    and val go to loaders, test is reported but never trained on.
+    Random split flatters scores since nearby frames match, so this
+    is the honest comparison for Phase 1.
+    """
+    ordered = sorted(pairs, key=lambda p: p[0].name)
+    n = len(ordered)
+    n_train = int(n * train_ratio)
+    n_val = int(n * val_ratio)
+    train = ordered[:n_train]
+    val = ordered[n_train:n_train + n_val]
+    test = ordered[n_train + n_val:]
+    return train, val, test
+
+
 # ---------------------------------------------------------------------------
 # 4. Augmentations — what we apply and why
 # ---------------------------------------------------------------------------
@@ -271,14 +293,26 @@ def get_dataloaders(
     train_ratio: float = 0.8,
     num_workers: int = 2,
     seed: int = 42,
+    split: str = "random",
 ) -> tuple[DataLoader, DataLoader]:
     """Build train + val DataLoaders.
 
     DataLoader = the "batcher": shuffles train, stacks samples into
     (B, C, H, W) batches, loads in parallel via num_workers.
+
+    split="random": shuffle with seed, 80/20 (baseline, optimistic).
+    split="chrono": timestamp order, 60/20/20 (paper setup). Test
+    split is held out and only counted here, never loaded.
     """
     pairs = find_pairs(root)
-    train_pairs, val_pairs = train_val_split(pairs, train_ratio, seed)
+    if split == "chrono":
+        train_pairs, val_pairs, test_pairs = chronological_split(pairs)
+        print(f"Chrono split: {len(train_pairs)} train / {len(val_pairs)} val "
+              f"/ {len(test_pairs)} test (timestamp order, test locked).")
+    else:
+        train_pairs, val_pairs = train_val_split(pairs, train_ratio, seed)
+        print(f"Split: {len(train_pairs)} train / {len(val_pairs)} val "
+              f"(seed={seed}, ratio={train_ratio}).")
 
     train_ds = SubPipeSegDataset(train_pairs, get_train_transforms(image_size))
     val_ds = SubPipeSegDataset(val_pairs, get_val_transforms(image_size))
@@ -291,6 +325,25 @@ def get_dataloaders(
         val_ds, batch_size=batch_size, shuffle=False,
         num_workers=num_workers, pin_memory=True,
     )
-    print(f"Split: {len(train_ds)} train / {len(val_ds)} val "
-          f"(seed={seed}, ratio={train_ratio}).")
     return train_loader, val_loader
+
+
+def get_full_loader(
+    root: str | Path,
+    image_size: tuple[int, int] = (256, 256),
+    batch_size: int = 8,
+    num_workers: int = 2,
+) -> tuple[DataLoader, list]:
+    """Loader over every pair in `root` (cross-chunk test).
+
+    Used to score a Chunk0 checkpoint on Chunk1-4 with no retrain
+    and no split games. Returns loader plus pairs for timestamps.
+    """
+    pairs = find_pairs(root)
+    ds = SubPipeSegDataset(pairs, get_val_transforms(image_size))
+    loader = DataLoader(
+        ds, batch_size=batch_size, shuffle=False,
+        num_workers=num_workers, pin_memory=True,
+    )
+    print(f"Full-chunk eval: {len(ds)} frames in {root}.")
+    return loader, pairs
