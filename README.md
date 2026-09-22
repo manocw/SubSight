@@ -114,8 +114,8 @@ Phase 1 gate (same weights logic, honest splits, no test leakage):
 | Test | IoU | Dice | Notes |
 |---|---|---|---|
 | Chunk0 random 80/20 | 0.7459 | 0.8368 | Baseline above, locked in tag v1-subpipe-baseline |
-| Chunk0 chrono 60/20/20 val | TBC | TBC | Set `split: chrono` in config, retrain on Colab T4, test stays locked |
-| Chunk0 chrono held-out test | TBC | TBC | Score once, never train on it |
+| Chunk0 chrono 60/20/20 val | 0.8200 | 0.8980 | Retrain seed 42, best epoch 17 (train log, eval cell to confirm) |
+| Chunk0 chrono held-out test | 0.6816 | 0.7876 | Scored once, never trained on. Worst frame IoU 0.0, sand-buried stretch again |
 | Chunk1 full chunk | TBC | TBC | Same Chunk0 weights, `--full-chunk`, no retrain |
 | Chunk2 full chunk | TBC | TBC | Same as above |
 | Chunk3 full chunk | TBC | TBC | Same as above |
