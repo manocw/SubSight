@@ -116,12 +116,14 @@ Phase 1 gate (same weights logic, honest splits, no test leakage):
 | Chunk0 random 80/20 | 0.7459 | 0.8368 | Baseline above, locked in tag v1-subpipe-baseline |
 | Chunk0 chrono 60/20/20 val | 0.8200 | 0.8980 | Retrain seed 42, best epoch 17, confirmed by eval figure below |
 | Chunk0 chrono held-out test | 0.6816 | 0.7876 | Scored once, never trained on. Worst frame IoU 0.0, sand-buried stretch again |
+| SegFormer-B0 from scratch, chrono val | 0.7751 | 0.8711 | Same split, seed 42, best epoch 10, 3.7M params. Worst val frame 0.4599, no total miss on val |
+| SegFormer-B0 from scratch, chrono test | 0.6280 | 0.7503 | Locked test, worst frame 0.0. Trails the pretrained U-Net on both splits |
 | Chunk1 full chunk | TBC | TBC | Same Chunk0 weights, `--full-chunk`, no retrain |
 | Chunk2 full chunk | TBC | TBC | Same as above |
 | Chunk3 full chunk | TBC | TBC | Same as above |
 | Chunk4 full chunk | TBC | TBC | Same as above |
 
-Gate passes when the table is full and the drop from random to chrono to cross-chunk is reported as is. SegFormer comparison runs at 256px on the chrono split before any 512px run. No 512px until the 256px baseline is defended.
+Gate passes when the table is full and the drop from random to chrono to cross-chunk is reported as is. SegFormer from scratch at 256px trails the pretrained U-Net (val 0.7751 vs 0.8200, test 0.6280 vs 0.6816): pretraining beats architecture at 388 training frames. No 512px until the 256px baseline is defended.
 
 All tasks (one repo, one toolkit):
 
