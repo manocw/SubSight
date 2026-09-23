@@ -103,7 +103,9 @@ def main() -> None:
     total, trainable = count_parameters(model)
     print(f"Model params={total:,} trainable={trainable:,}")
 
-    pos_weight = torch.tensor(POS_WEIGHT, device=device)
+    # (1,10,1,1): broadcasts over (B,10,H,W). A flat (10,) would
+    # align to W and blow up, which is exactly what happened on Kaggle.
+    pos_weight = torch.tensor(POS_WEIGHT, device=device).view(1, -1, 1, 1)
     criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg["train"]["lr"])
 

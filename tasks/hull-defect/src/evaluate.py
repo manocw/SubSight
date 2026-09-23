@@ -91,7 +91,7 @@ def main() -> None:
         num_workers=cfg["data"]["num_workers"],
     )
     criterion = nn.BCEWithLogitsLoss(
-        pos_weight=torch.tensor(pos_weight, device=device))
+        pos_weight=torch.tensor(pos_weight, device=device).view(1, -1, 1, 1))
     _, va_iou, va_dice = validate(model, val_loader, criterion, device)
     print(f"{'class':<18}{'IoU':>8}{'Dice':>8}")
     for c, i, d in zip(CLASSES, va_iou.tolist(), va_dice.tolist()):
