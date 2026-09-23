@@ -118,12 +118,14 @@ Phase 1 gate (same weights logic, honest splits, no test leakage):
 | Chunk0 chrono held-out test | 0.6816 | 0.7876 | Scored once, never trained on. Worst frame IoU 0.0, sand-buried stretch again |
 | SegFormer-B0 from scratch, chrono val | 0.7751 | 0.8711 | Same split, seed 42, best epoch 10, 3.7M params. Worst val frame 0.4599, no total miss on val |
 | SegFormer-B0 from scratch, chrono test | 0.6280 | 0.7503 | Locked test, worst frame 0.0. Trails the pretrained U-Net on both splits |
+| U-Net resnet34 512px, chrono val | 0.8175 | 0.8971 | Best epoch 17, batch 4. Worst val frame 0.5392 |
+| U-Net resnet34 512px, chrono test | 0.7031 | 0.8052 | Locked test, worst frame 0.0. Level with 256px, verdict: no gain |
 | Chunk1 full chunk | TBC | TBC | Same Chunk0 weights, `--full-chunk`, no retrain |
 | Chunk2 full chunk | TBC | TBC | Same as above |
 | Chunk3 full chunk | TBC | TBC | Same as above |
 | Chunk4 full chunk | TBC | TBC | Same as above |
 
-Gate passes when the table is full and the drop from random to chrono to cross-chunk is reported as is. SegFormer from scratch at 256px trails the pretrained U-Net (val 0.7751 vs 0.8200, test 0.6280 vs 0.6816): pretraining beats architecture at 388 training frames. No 512px until the 256px baseline is defended.
+Gate passes when the table is full and the drop from random to chrono to cross-chunk is reported as is. SegFormer from scratch at 256px trails the pretrained U-Net (val 0.7751 vs 0.8200, test 0.6280 vs 0.6816): pretraining beats architecture at 388 training frames. 512px U-Net lands level with 256px (val 0.8175 vs 0.8200, test 0.7031 vs 0.6816), so resolution is not the bottleneck and 256px stays for cost and edge weight.
 
 All tasks (one repo, one toolkit):
 
