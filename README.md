@@ -132,7 +132,7 @@ All tasks (one repo, one toolkit):
 | Task | Data | Status | Score |
 |---|---|---|---|
 | pipe-seg | SubPipe Chunk0 | Baseline done, Phase 1 hardening in progress | Val IoU 0.7459 / Dice 0.8368 (random, optimistic) |
-| hull-defect | LIACI (TBC licence) | Spec only, see SPEC.md | — |
+| hull-defect | LIACI (CC BY-NC-SA, SINTEF) | Baseline done, see tasks/hull-defect/ | Macro IoU 0.2491, hull 0.62, defect 0.0 (rare-class note kept) |
 | sonar | SubPipe SSS or UATD (TBC licence) | Spec only, see SPEC.md | — |
 | enhance | UIEB + EUVP (TBC licence) | Spec only, see SPEC.md | — |
 | edge + demo | Jetson Orin Nano + UCL tow tank | Spec only, see SPEC.md | Latency vs accuracy curve TBC |
