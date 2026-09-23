@@ -1,0 +1,28 @@
+# Task head config: LIACI hull-defect segmentation (Phase 2).
+# Same discipline as pipe-seg: 256px on free T4 first, fixed seed,
+# official split file, never train on the eval split.
+
+data:
+  root: "/kaggle/input/datasets/manolochow/underwatershiplifecycle/LIACi_dataset_pretty"
+  split_csv: "train_test_split.csv"  # cols: file_name, split (train/test)
+  image_size: [256, 256]
+  num_workers: 2
+  seed: 42
+  # Fixed channel order. Index is the contract: model out, metrics, figures.
+  classes: ["ship_hull", "anode", "marine_growth", "paint_peel", "corrosion",
+            "defect", "propeller", "sea_chest_grating", "over_board_valves",
+            "bilge_keel"]
+
+model:
+  architecture: "unet"      # same backbone family as pipe-seg for a fair read
+  encoder: "resnet34"
+  encoder_weights: "imagenet"
+  in_channels: 3
+  classes: 10               # one logit per class (multi-label, sigmoid)
+
+train:
+  batch_size: 8
+  epochs: 20
+  lr: 0.0003
+  checkpoint_dir: "checkpoints_hull"
+  best_metric: "val_macro_iou"  # mean IoU over classes present in val
