@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SubSight viewer</title>
+<style>
+body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2em auto; padding: 0 1em; }
+video { width: 100%; background: #000; }
+#timeline { width: 100%; height: 48px; border: 1px solid #ccc; cursor: pointer; }
+#flags { margin-top: 1em; }
+.flag { padding: 0.3em 0.5em; border-bottom: 1px solid #eee; cursor: pointer; }
+.flag:hover { background: #f5f5f5; }
+</style>
+</head>
+<body>
+<h1>SubSight viewer</h1>
+<input type="file" id="file" accept="video/mp4">
+<button id="upload">Upload and analyse</button>
+<p id="status"></p>
+<video id="player" controls></video>
+<canvas id="timeline" width="860" height="48"></canvas>
+<div id="flags"></div>
+<script>
+const $ = id => document.getElementById(id);
+let scores = null, vid = null;
+
+$('upload').onclick = async () => {
+  const f = $('file').files[0];
+  if (!f) { $('status').textContent = 'Pick a file first.'; return; }
+  $('status').textContent = 'Uploading...';
+  const fd = new FormData();
+  fd.append('file', f);
+  const r = await fetch('/api/videos', { method: 'POST', body: fd });
+  const j = await r.json();
+  vid = j.id;
+  $('player').src = `/api/videos/${vid}/file`;
+  poll();
+};
+
+async function poll() {
+  $('status').textContent = 'Analysing...';
+  for (;;) {
+    const r = await fetch(`/api/videos/${vid}/scores`);
+    if (r.ok) {
+      scores = await r.json();
+      $('status').textContent = `${scores.frames.length} frames scored.`;
+      draw();
+      break;
+    }
+    await new Promise(res => setTimeout(res, 2000));
+  }
+}
+
+function flagged(f) {
+  const hits = [];
+  if (f.pipe > 0.02) hits.push(`pipe ${f.pipe.toFixed(2)}`);
+  for (const [c, v] of Object.entries(f.classes))
+    if (v > 0.01 && c !== 'ship_hull') hits.push(`${c} ${v.toFixed(2)}`);
+  return hits;
+}
+
+function draw() {
+  const cv = $('timeline'), ctx = cv.getContext('2d');
+  const dur = Math.max(...scores.frames.map(f => f.t)) || 1;
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  const box = $('flags');
+  box.innerHTML = '';
+  for (const f of scores.frames) {
+    const hits = flagged(f);
+    if (!hits.length) continue;
+    const x = (f.t / dur) * cv.width;
+    ctx.fillStyle = '#c00';
+    ctx.fillRect(x - 1, 0, 3, cv.height);
+    const d = document.createElement('div');
+    d.className = 'flag';
+    d.textContent = `${f.t.toFixed(1)}s: ${hits.join(', ')}`;
+    d.onclick = () => { $('player').currentTime = f.t; $('player').play(); };
+    box.appendChild(d);
+  }
+  cv.onclick = e => {
+    const r = cv.getBoundingClientRect();
+    $('player').currentTime = ((e.clientX - r.left) / r.width) * dur;
+  };
+}
+</script>
+</body>
+</html>

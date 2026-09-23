@@ -25,6 +25,10 @@ outputs/*
 tasks/*/outputs/*
 !tasks/*/outputs/eval_examples.png
 !tasks/hull-defect/outputs/eval.png
+
+# Web viewer runtime (uploads, scores, db, exported weights)
+web/data/
+web/models/
 *.log
 
 # Notebooks / Colab
