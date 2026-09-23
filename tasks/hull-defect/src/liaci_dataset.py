@@ -68,8 +68,13 @@ class LiaciDataset(Dataset):
         if self.transform is not None:
             s = self.transform(image=img, mask=mask)
             img, mask = s["image"], s["mask"]
-        if mask.ndim == 3:
-            mask = np.moveaxis(mask, -1, 0)  # (10, H, W)
+        if isinstance(mask, np.ndarray):
+            mask = torch.from_numpy(
+                np.ascontiguousarray(np.moveaxis(mask, -1, 0)))
+        elif (isinstance(mask, torch.Tensor) and mask.ndim == 3
+                and mask.shape[0] != len(CLASSES)
+                and mask.shape[-1] == len(CLASSES)):
+            mask = mask.permute(2, 0, 1)  # (H, W, 10) -> (10, H, W)
         return img, mask.float()
 
 
