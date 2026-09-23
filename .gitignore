@@ -24,6 +24,7 @@ outputs/*
 !outputs/eval_512.png
 tasks/*/outputs/*
 !tasks/*/outputs/eval_examples.png
+!tasks/hull-defect/outputs/eval.png
 *.log
 
 # Notebooks / Colab
