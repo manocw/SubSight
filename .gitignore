@@ -18,6 +18,8 @@ checkpoints_*/*.pth
 checkpoints_*/*.pt
 tasks/*/checkpoints/*.pth
 tasks/*/checkpoints/*.pt
+tasks/*/checkpoints_*/*.pth
+tasks/*/checkpoints_*/*.pt
 outputs/*
 !outputs/eval_examples.png
 !outputs/eval_segformer.png
