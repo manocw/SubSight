@@ -32,6 +32,33 @@ from src.utils import set_seed  # noqa: E402
 POS_WEIGHT = [0.5, 50.0, 10.0, 34.0, 50.0, 50.0, 10.0, 8.0, 50.0, 50.0]
 
 
+class SigmoidFocalLoss(nn.Module):
+    """Focal on top of BCE with pos_weight. Gamma 2, alpha 0.25 is std."""
+
+    def __init__(self, pos_weight, gamma=2.0, alpha=0.25):
+        super().__init__()
+        self.bce = nn.BCEWithLogitsLoss(pos_weight=pos_weight,
+                                        reduction="none")
+        self.gamma = gamma
+        self.alpha = alpha
+
+    def forward(self, logits, targets):
+        bce = self.bce(logits, targets)
+        pt = torch.exp(-bce)
+        return (self.alpha * (1 - pt) ** self.gamma * bce).mean()
+
+
+def build_criterion(cfg, pos_weight):
+    """Loss switch. Default bce keeps the baseline exact."""
+    loss_cfg = cfg["train"].get("loss", {"name": "bce"})
+    name = loss_cfg.get("name", "bce")
+    if name == "focal":
+        return SigmoidFocalLoss(pos_weight,
+                                gamma=loss_cfg.get("gamma", 2.0),
+                                alpha=loss_cfg.get("alpha", 0.25))
+    return nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+
+
 def train_one_epoch(model, loader, criterion, optimizer, device):
     model.train()
     tot, n = 0.0, 0
@@ -106,7 +133,7 @@ def main() -> None:
     # (1,10,1,1): broadcasts over (B,10,H,W). A flat (10,) would
     # align to W and blow up, which is exactly what happened on Kaggle.
     pos_weight = torch.tensor(POS_WEIGHT, device=device).view(1, -1, 1, 1)
-    criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+    criterion = build_criterion(cfg, pos_weight)
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg["train"]["lr"])
 
     ckpt_dir = Path(cfg["train"]["checkpoint_dir"])
