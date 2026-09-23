@@ -56,7 +56,37 @@ def build_criterion(cfg, pos_weight):
         return SigmoidFocalLoss(pos_weight,
                                 gamma=loss_cfg.get("gamma", 2.0),
                                 alpha=loss_cfg.get("alpha", 0.25))
+    if name == "bce_dice":
+        return BceDiceLoss(pos_weight,
+                           dice_weight=loss_cfg.get("dice_weight", 0.5))
     return nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+
+
+class SoftDiceLoss(nn.Module):
+    """Mean soft Dice over classes present in the batch."""
+
+    def forward(self, logits, targets):
+        probs = torch.sigmoid(logits)
+        dims = (0, 2, 3)
+        inter = (probs * targets).sum(dim=dims)
+        denom = probs.sum(dim=dims) + targets.sum(dim=dims)
+        dice = torch.where(denom > 0, 2 * inter / (denom + 1e-6),
+                           torch.ones_like(inter))
+        return 1 - dice.mean()
+
+
+class BceDiceLoss(nn.Module):
+    """0.5 BCE + 0.5 Dice by default. Dice lifts small blobs."""
+
+    def __init__(self, pos_weight, dice_weight=0.5):
+        super().__init__()
+        self.bce = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+        self.dice = SoftDiceLoss()
+        self.w = dice_weight
+
+    def forward(self, logits, targets):
+        return (1 - self.w) * self.bce(logits, targets) + \
+            self.w * self.dice(logits, targets)
 
 
 def train_one_epoch(model, loader, criterion, optimizer, device):
