@@ -21,6 +21,7 @@ tasks/*/checkpoints/*.pt
 outputs/*
 !outputs/eval_examples.png
 !outputs/eval_segformer.png
+!outputs/eval_512.png
 tasks/*/outputs/*
 !tasks/*/outputs/eval_examples.png
 *.log
