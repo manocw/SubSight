@@ -89,8 +89,14 @@ def main() -> None:
         union = (pred | gt).sum(axis=(1, 2))
         ious = np.where(union > 0, inter / np.maximum(union, 1), np.nan)
         macro = float(np.nanmean(ious))
-        cv2.putText(ov, f"macro IoU {macro:.2f}", (10, 24),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+        lines = [f"macro {macro:.2f}"]
+        for k, i in enumerate(idx):
+            v = ious[i]
+            tag = f"{FOCUS[k][:6]} {v:.2f}" if not np.isnan(v) else f"{FOCUS[k][:6]} n/a"
+            lines.append(tag)
+        for j, t in enumerate(lines):
+            cv2.putText(ov, t, (10, 22 + 18 * j),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         writer.write(np.concatenate([bgr, ov], axis=1))
     writer.release()
     print(f"Saved clip -> {out_path} ({len(ds)} frames).")
