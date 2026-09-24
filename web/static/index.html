@@ -19,8 +19,11 @@ video { width: 100%; background: #000; }
 <button id="upload">Upload and analyse</button>
 <p id="status"></p>
 <video id="player" controls></video>
+<video id="overlay" controls></video>
 <canvas id="timeline" width="860" height="48"></canvas>
 <div id="flags"></div>
+<pre id="transcript"></pre>
+<a id="dl" href="#">Download transcript</a>
 <script>
 const $ = id => document.getElementById(id);
 let scores = null, vid = null;
@@ -35,6 +38,8 @@ $('upload').onclick = async () => {
   const j = await r.json();
   vid = j.id;
   $('player').src = `/api/videos/${vid}/file`;
+  $('overlay').src = `/api/videos/${vid}/overlay`;
+  $('dl').href = `/api/videos/${vid}/transcript`;
   poll();
 };
 
@@ -45,6 +50,8 @@ async function poll() {
     if (r.ok) {
       scores = await r.json();
       $('status').textContent = `${scores.frames.length} frames scored.`;
+      const t = await (await fetch(`/api/videos/${vid}/transcript`)).text();
+      $('transcript').textContent = t;
       draw();
       break;
     }

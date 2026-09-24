@@ -26,9 +26,12 @@ HERE = Path(__file__).resolve().parent
 DATA = HERE / "data"
 VIDEOS = DATA / "videos"
 SCORES = DATA / "scores"
+OVERLAYS = DATA / "overlays"
+TRANSCRIPTS = DATA / "transcripts"
 DB = DATA / "jobs.db"
 SAMPLE_FPS = 2.0
 THRESHOLDS = {"pipe": 0.02, "macro": 0.05}
+FLAG_THRESH = {"pipe": 0.02, "ship_hull": 0.05, "propeller": 0.01}
 
 CLASSES = ["ship_hull", "anode", "marine_growth", "paint_peel", "corrosion",
            "defect", "propeller", "sea_chest_grating", "over_board_valves",
@@ -51,6 +54,8 @@ def db() -> sqlite3.Connection:
     DATA.mkdir(parents=True, exist_ok=True)
     VIDEOS.mkdir(parents=True, exist_ok=True)
     SCORES.mkdir(parents=True, exist_ok=True)
+    OVERLAYS.mkdir(parents=True, exist_ok=True)
+    TRANSCRIPTS.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(DB)
     con.execute("CREATE TABLE IF NOT EXISTS jobs "
                 "(id TEXT PRIMARY KEY, filename TEXT, status TEXT)")
@@ -80,6 +85,13 @@ class StubPredictor:
                 "classes": {c: (cov / 10 if i else 0.0)
                             for i, c in enumerate(CLASSES)}}
 
+    def masks(self, frame: np.ndarray) -> dict:
+        h, w, _ = frame.shape
+        yy, xx = np.mgrid[:h, :w]
+        blob = (((xx - w // 2) ** 2 + (yy - h // 2) ** 2) < (h // 4) ** 2)
+        small = blob.astype(bool)
+        return {"pipe": small, "ship_hull": small, "propeller": small}
+
 
 class OnnxPredictor:
     """Real heads from web/models (needs onnxruntime + .onnx files)."""
@@ -103,6 +115,31 @@ class OnnxPredictor:
         macro = float(np.mean([cov[c] for c in PROD_CLASSES]))
         return {"pipe": pipe, "macro": macro, "classes": cov}
 
+    def masks(self, frame: np.ndarray) -> dict:
+        from PIL import Image
+        small = np.array(Image.fromarray(frame).resize((256, 256)))
+        x = (small.astype(np.float32) / 255 - _MEAN) / _STD
+        x = np.moveaxis(x, -1, 0)[None].astype(np.float32)
+        out = {}
+        out["pipe"] = (sigmoid(self.pipe.run(None, {"input": x})[0][0])
+                       > 0.5)[0]
+        probs = sigmoid(self.hull.run(None, {"input": x})[0][0])
+        for c in ("ship_hull", "propeller"):
+            out[c] = probs[CLASSES.index(c)] > SIGMOID_THRESH[c]
+        return out
+
+
+def hits_for(entry: dict) -> list:
+    """Production trio only. Research classes never flag."""
+    hits = []
+    if entry.get("pipe", 0) > FLAG_THRESH["pipe"]:
+        hits.append(f"pipe {entry['pipe']:.2f}")
+    for c in ("ship_hull", "propeller"):
+        v = entry.get("classes", {}).get(c, 0)
+        if v > FLAG_THRESH[c]:
+            hits.append(f"{c} {v:.2f}")
+    return hits
+
 
 def get_predictor():
     if os.environ.get("PREDICTOR", "stub") == "onnx":
@@ -110,8 +147,30 @@ def get_predictor():
     return StubPredictor()
 
 
+def paint_overlay(frame: np.ndarray, masks: dict, label: str) -> np.ndarray:
+    """Raw left, overlay right. Pipe red, hull green, propeller blue."""
+    from PIL import Image, ImageDraw
+    small = np.array(Image.fromarray(frame).resize((256, 256)))
+    ov = small.copy()
+    tints = {"pipe": (255, 0, 0), "ship_hull": (0, 255, 0),
+             "propeller": (0, 150, 255)}
+    for c, colour in tints.items():
+        m = masks.get(c)
+        if m is None:
+            continue
+        tint = np.zeros_like(ov)
+        tint[m] = colour
+        ov = np.where(m[..., None], (0.5 * ov + 0.5 * tint).astype(np.uint8),
+                      ov)
+    side = np.concatenate([small, ov], axis=1)
+    img = Image.fromarray(side)
+    ImageDraw.Draw(img).text((8, 8), label, fill=(255, 255, 255))
+    return np.array(img)
+
+
 def process_video(vid: str, src: Path) -> None:
-    """Sample frames at SAMPLE_FPS, score, write scores json."""
+    """Sample frames at SAMPLE_FPS, score, write scores json, overlay
+    mp4 and a plain-text transcript of production hits."""
     set_status(vid, "working")
     try:
         reader = imageio.get_reader(str(src))
@@ -120,14 +179,25 @@ def process_video(vid: str, src: Path) -> None:
         step = max(1, round(src_fps / SAMPLE_FPS))
         predictor = get_predictor()
         frames = []
+        lines = []
+        writer = imageio.get_writer(str(OVERLAYS / f"{vid}.mp4"),
+                                    fps=SAMPLE_FPS)
         for i, frame in enumerate(reader):
             if i % step:
                 continue
+            t = round(i / src_fps, 2)
             s = predictor.score(frame)
-            s["t"] = round(i / src_fps, 2)
+            s["t"] = t
             frames.append(s)
-        out = {"fps": SAMPLE_FPS, "frames": frames}
-        (SCORES / f"{vid}.json").write_text(json.dumps(out))
+            hits = hits_for(s)
+            tag = f"{t:.1f}s: " + (", ".join(hits) if hits else "clear")
+            lines.append(tag)
+            writer.append_data(paint_overlay(frame,
+                                             predictor.masks(frame), tag))
+        writer.close()
+        (SCORES / f"{vid}.json").write_text(json.dumps(
+            {"fps": SAMPLE_FPS, "frames": frames}))
+        (TRANSCRIPTS / f"{vid}.txt").write_text("\n".join(lines) + "\n")
         set_status(vid, "done")
     except Exception as exc:  # keep the job row honest
         (SCORES / f"{vid}.error.txt").write_text(str(exc))
@@ -169,6 +239,16 @@ def scores(vid: str):
 @app.get("/api/videos/{vid}/file")
 def videofile(vid: str):
     return FileResponse(VIDEOS / f"{vid}.mp4", media_type="video/mp4")
+
+
+@app.get("/api/videos/{vid}/overlay")
+def overlayfile(vid: str):
+    return FileResponse(OVERLAYS / f"{vid}.mp4", media_type="video/mp4")
+
+
+@app.get("/api/videos/{vid}/transcript")
+def transcript(vid: str):
+    return FileResponse(TRANSCRIPTS / f"{vid}.txt", media_type="text/plain")
 
 
 @app.get("/")

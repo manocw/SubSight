@@ -30,12 +30,19 @@ checkpoints. The web app never trains and never imports torch.
 ```
 
 Values are predicted-positive pixel fractions per class (plus pipe
-and macro). A frame is flagged when any value tops its threshold
-(defaults in web/app.py, tunable per class).
+and macro). Macro is the mean over production classes only
+(ship_hull, propeller). A frame is flagged when a production value
+tops its threshold: pipe 0.02, ship_hull 0.05, propeller 0.01.
+Research classes are logged in the scores file, never flagged.
 
 ## Endpoints (web/app.py)
 
 - POST /api/videos (multipart file) -> {"id": ...}
 - GET /api/jobs -> list with status (queued/working/done/error)
 - GET /api/videos/{id}/scores -> scores file above
-- GET / serves the viewer (upload, player, flag timeline)
+- GET /api/videos/{id}/overlay -> side-by-side mp4 (raw left,
+  overlay right, pipe red, hull green, propeller blue, stamp per frame)
+- GET /api/videos/{id}/transcript -> plain text, one line per sampled
+  frame (`12.5s: pipe 0.31, propeller 0.08` or `clear`)
+- GET / serves the viewer (upload, raw plus overlay players,
+  flag timeline, transcript view plus download)
