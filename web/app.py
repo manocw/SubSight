@@ -34,6 +34,12 @@ CLASSES = ["ship_hull", "anode", "marine_growth", "paint_peel", "corrosion",
            "defect", "propeller", "sea_chest_grating", "over_board_valves",
            "bilge_keel"]
 
+# Per-pixel sigmoid thresholds from the Kaggle val sweep. Production
+# classes only: hull 0.5 (prec 0.92), propeller 0.7 (prec 0.74).
+# Rest use 0.5, logged but never flagged in the operator view.
+SIGMOID_THRESH = {"ship_hull": 0.5, "propeller": 0.7}
+PROD_CLASSES = ["ship_hull", "propeller"]
+
 _MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
 _STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 
@@ -92,9 +98,9 @@ class OnnxPredictor:
         pipe = float((sigmoid(self.pipe.run(None, {"input": x})[0])
                       > 0.5).mean())
         probs = sigmoid(self.hull.run(None, {"input": x})[0][0])
-        cov = {c: float((probs[i] > 0.5).mean())
+        cov = {c: float((probs[i] > SIGMOID_THRESH.get(c, 0.5)).mean())
                for i, c in enumerate(CLASSES)}
-        macro = float(np.mean(list(cov.values())))
+        macro = float(np.mean([cov[c] for c in PROD_CLASSES]))
         return {"pipe": pipe, "macro": macro, "classes": cov}
 
 
