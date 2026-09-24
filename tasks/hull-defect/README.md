@@ -20,28 +20,32 @@ defect 4%. Anodes cover 1.9% of pixels when present.
 ## Model
 
 U-Net ResNet-34, ImageNet start, 10 output channels, 256px, batch 8,
-20 epochs, lr 3e-4. pos_weight per class from measured pixel
-prevalence, capped at 50. Checkpoint on macro IoU over classes
-present in val. Same backbone family as pipe-seg for a fair read.
+40 epochs, lr 3e-4. Loss 0.5 BCE with pos_weight plus 0.5 soft Dice.
+pos_weight per class from measured pixel prevalence, capped at 50.
+Checkpoint on macro IoU over classes present in val. Same backbone
+family as pipe-seg for a fair read. Focal gamma 2 alpha 0.25 was
+tested and dropped: macro 0.2037 with hull collapse.
 
 ## Results
 
 | Class | IoU | Dice |
 |---|---|---|
-| ship_hull | 0.6214 | 0.7665 |
-| anode | 0.0878 | 0.1615 |
-| marine_growth | 0.2998 | 0.4613 |
-| paint_peel | 0.0831 | 0.1535 |
-| corrosion | 0.0550 | 0.1043 |
-| defect | 0.0000 | 0.0000 |
-| propeller | 0.4928 | 0.6603 |
-| sea_chest_grating | 0.5115 | 0.6768 |
-| over_board_valves | 0.2555 | 0.4069 |
-| bilge_keel | 0.0838 | 0.1546 |
-| macro (present) | 0.2491 | — |
+| ship_hull | 0.8303 | 0.9073 |
+| anode | 0.1472 | 0.2566 |
+| marine_growth | 0.3347 | 0.5016 |
+| paint_peel | 0.1300 | 0.2301 |
+| corrosion | 0.0837 | 0.1545 |
+| defect | 0.0001 | 0.0002 |
+| propeller | 0.6706 | 0.8028 |
+| sea_chest_grating | 0.7462 | 0.8546 |
+| over_board_valves | 0.6865 | 0.8141 |
+| bilge_keel | 0.3399 | 0.5074 |
+| macro (present) | 0.3969 | — |
 
-Big structures score, small rare ones do not. Defect at 4% prevalence
-never registers. That is the baseline to beat, not a bug report.
+BCE-Dice 40 epochs, best epoch 38, seed 42. BCE 20 epoch
+baseline was 0.2491. Longer schedule plus Dice lifts hull,
+propeller, grating, valves, keel. Defect at 4% prevalence
+still reads 0.0. That class stays a stated gap.
 
 Overlays (`outputs/eval.png`, anode/corrosion/peel/defect in colour):
 
@@ -49,6 +53,5 @@ Overlays (`outputs/eval.png`, anode/corrosion/peel/defect in colour):
 
 ## Next
 
-- Focal or dice-weighted loss for the tail classes
-- Longer schedule once the baseline is defended
 - MobileNetV2 encoder per the paper's real-time pick
+- Per-class video with all focus classes stamped
