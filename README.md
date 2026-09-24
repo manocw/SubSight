@@ -120,10 +120,15 @@ Phase 1 gate (same weights logic, honest splits, no test leakage):
 | SegFormer-B0 from scratch, chrono test | 0.6280 | 0.7503 | Locked test, worst frame 0.0. Trails the pretrained U-Net on both splits |
 | U-Net resnet34 512px, chrono val | 0.8175 | 0.8971 | Best epoch 17, batch 4. Worst val frame 0.5392 |
 | U-Net resnet34 512px, chrono test | 0.7031 | 0.8052 | Locked test, worst frame 0.0. Level with 256px, verdict: no gain |
-| Chunk1 full chunk | TBC | TBC | Same Chunk0 weights, `--full-chunk`, no retrain |
-| Chunk2 full chunk | TBC | TBC | Same as above |
-| Chunk3 full chunk | TBC | TBC | Same as above |
-| Chunk4 full chunk | TBC | TBC | Same as above |
+| Chunk1 full chunk | N/A | N/A | No optical labels in public zips, Chunk1 holds raw sensors plus sonar only, verified Sep 2026 |
+| Chunk2 full chunk | N/A | N/A | Same as above, only Chunk2/Mini 647 pairs are labelled |
+| Chunk3 full chunk | N/A | N/A | No Chunk3 in public zips |
+| Chunk4 full chunk | N/A | N/A | No Chunk4 in public zips |
+
+Gate closed Sep 2026: cross-chunk optical scoring is impossible, the
+public zips label one chunk only. Chrono val plus held-out test stand
+as the honest read. Mini2 instead unlocks Phase 3: 669 paired sonar
+frames with YOLO boxes.
 
 Gate passes when the table is full and the drop from random to chrono to cross-chunk is reported as is. SegFormer from scratch at 256px trails the pretrained U-Net (val 0.7751 vs 0.8200, test 0.6280 vs 0.6816): pretraining beats architecture at 388 training frames. 512px U-Net lands level with 256px (val 0.8175 vs 0.8200, test 0.7031 vs 0.6816), so resolution is not the bottleneck and 256px stays for cost and edge weight.
 
@@ -133,7 +138,7 @@ All tasks (one repo, one toolkit):
 |---|---|---|---|
 | pipe-seg | SubPipe Chunk0 | Baseline done, Phase 1 hardening in progress | Val IoU 0.7459 / Dice 0.8368 (random, optimistic) |
 | hull-defect | LIACI (CC BY-NC-SA, SINTEF) | BCE-Dice 40ep, see tasks/hull-defect/ | Macro IoU 0.3969, hull 0.83, defect 0.0 (rare-class note kept) |
-| sonar | SubPipe SSS or UATD (TBC licence) | Spec only, see SPEC.md | — |
+| sonar | SubPipe MiniSSS HF (same Zenodo record) | YOLOv8n training, see tasks/sonar-detector/ | mAP50 TBC |
 | enhance | UIEB + EUVP (TBC licence) | Spec only, see SPEC.md | — |
 | edge + demo | Jetson Orin Nano + UCL tow tank | Spec only, see SPEC.md | Latency vs accuracy curve TBC |
 

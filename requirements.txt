@@ -17,5 +17,8 @@ pyyaml>=6.0
 tqdm>=4.66.0
 matplotlib>=3.8.0
 
+# --- Sonar detector (Phase 3, YOLOv8 nano) ---
+ultralytics>=8.0.0
+
 # NOTE: transformers (for SegFormer later) is intentionally NOT
 # installed yet. We'll add it at Stage 3 so you can defend U-Net first.

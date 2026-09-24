@@ -37,7 +37,9 @@ Research classes are logged in the scores file, never flagged.
 
 ## Endpoints (web/app.py)
 
-- POST /api/videos (multipart file) -> {"id": ...}
+- POST /api/videos (multipart file plus head=both/pipe/hull) -> {"id": ...}
+  Head gates the job: pipe surveys never fire hull flags and reverse.
+  Scores file carries the head used.
 - GET /api/jobs -> list with status (queued/working/done/error)
 - GET /api/videos/{id}/scores -> scores file above
 - GET /api/videos/{id}/overlay -> side-by-side mp4 (raw left,

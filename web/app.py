@@ -18,7 +18,7 @@ from pathlib import Path
 
 import imageio.v2 as imageio
 import numpy as np
-from fastapi import FastAPI, UploadFile
+from fastapi import FastAPI, Form, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -129,15 +129,17 @@ class OnnxPredictor:
         return out
 
 
-def hits_for(entry: dict) -> list:
-    """Production trio only. Research classes never flag."""
+def hits_for(entry: dict, head: str = "both") -> list:
+    """Production trio only. Research classes never flag. Head gates
+    which job scores: pipe surveys never fire hull flags and reverse."""
     hits = []
-    if entry.get("pipe", 0) > FLAG_THRESH["pipe"]:
+    if head in ("both", "pipe") and entry.get("pipe", 0) > FLAG_THRESH["pipe"]:
         hits.append(f"pipe {entry['pipe']:.2f}")
-    for c in ("ship_hull", "propeller"):
-        v = entry.get("classes", {}).get(c, 0)
-        if v > FLAG_THRESH[c]:
-            hits.append(f"{c} {v:.2f}")
+    if head in ("both", "hull"):
+        for c in ("ship_hull", "propeller"):
+            v = entry.get("classes", {}).get(c, 0)
+            if v > FLAG_THRESH[c]:
+                hits.append(f"{c} {v:.2f}")
     return hits
 
 
@@ -147,13 +149,19 @@ def get_predictor():
     return StubPredictor()
 
 
-def paint_overlay(frame: np.ndarray, masks: dict, label: str) -> np.ndarray:
-    """Raw left, overlay right. Pipe red, hull green, propeller blue."""
+def paint_overlay(frame: np.ndarray, masks: dict, label: str,
+                  head: str = "both") -> np.ndarray:
+    """Raw left, overlay right. Pipe red, hull green, propeller blue.
+    Only the selected job paints, so hull jobs never show pipe noise."""
     from PIL import Image, ImageDraw
     small = np.array(Image.fromarray(frame).resize((256, 256)))
     ov = small.copy()
     tints = {"pipe": (255, 0, 0), "ship_hull": (0, 255, 0),
              "propeller": (0, 150, 255)}
+    if head == "pipe":
+        tints = {"pipe": tints["pipe"]}
+    elif head == "hull":
+        tints = {c: tints[c] for c in ("ship_hull", "propeller")}
     for c, colour in tints.items():
         m = masks.get(c)
         if m is None:
@@ -168,7 +176,7 @@ def paint_overlay(frame: np.ndarray, masks: dict, label: str) -> np.ndarray:
     return np.array(img)
 
 
-def process_video(vid: str, src: Path) -> None:
+def process_video(vid: str, src: Path, head: str = "both") -> None:
     """Sample frames at SAMPLE_FPS, score, write scores json, overlay
     mp4 and a plain-text transcript of production hits."""
     set_status(vid, "working")
@@ -189,14 +197,15 @@ def process_video(vid: str, src: Path) -> None:
             s = predictor.score(frame)
             s["t"] = t
             frames.append(s)
-            hits = hits_for(s)
+            hits = hits_for(s, head)
             tag = f"{t:.1f}s: " + (", ".join(hits) if hits else "clear")
             lines.append(tag)
             writer.append_data(paint_overlay(frame,
-                                             predictor.masks(frame), tag))
+                                             predictor.masks(frame),
+                                             tag, head))
         writer.close()
         (SCORES / f"{vid}.json").write_text(json.dumps(
-            {"fps": SAMPLE_FPS, "frames": frames}))
+            {"fps": SAMPLE_FPS, "head": head, "frames": frames}))
         (TRANSCRIPTS / f"{vid}.txt").write_text("\n".join(lines) + "\n")
         set_status(vid, "done")
     except Exception as exc:  # keep the job row honest
@@ -205,8 +214,10 @@ def process_video(vid: str, src: Path) -> None:
 
 
 @app.post("/api/videos")
-async def upload(file: UploadFile):
+async def upload(file: UploadFile, head: str = Form("both")):
     vid = uuid.uuid4().hex[:12]
+    if head not in ("both", "pipe", "hull"):
+        head = "both"
     dest = VIDEOS / f"{vid}.mp4"
     dest.write_bytes(await file.read())
     con = db()
@@ -214,7 +225,7 @@ async def upload(file: UploadFile):
                 (vid, file.filename, "queued"))
     con.commit()
     con.close()
-    threading.Thread(target=process_video, args=(vid, dest),
+    threading.Thread(target=process_video, args=(vid, dest, head),
                      daemon=True).start()
     return {"id": vid}
 

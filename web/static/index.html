@@ -16,6 +16,11 @@ video { width: 100%; background: #000; }
 <body>
 <h1>SubSight viewer</h1>
 <input type="file" id="file" accept="video/mp4">
+<select id="head">
+<option value="both">Both jobs</option>
+<option value="pipe">Pipe survey</option>
+<option value="hull" selected>Hull inspection</option>
+</select>
 <button id="upload">Upload and analyse</button>
 <p id="status"></p>
 <video id="player" controls></video>
@@ -34,6 +39,7 @@ $('upload').onclick = async () => {
   $('status').textContent = 'Uploading...';
   const fd = new FormData();
   fd.append('file', f);
+  fd.append('head', $('head').value);
   const r = await fetch('/api/videos', { method: 'POST', body: fd });
   const j = await r.json();
   vid = j.id;
@@ -60,10 +66,13 @@ async function poll() {
 }
 
 function flagged(f) {
+  const head = $('head').value;
   const hits = [];
-  if (f.pipe > 0.02) hits.push(`pipe ${f.pipe.toFixed(2)}`);
-  if (f.classes.ship_hull > 0.05) hits.push(`hull ${f.classes.ship_hull.toFixed(2)}`);
-  if (f.classes.propeller > 0.01) hits.push(`propeller ${f.classes.propeller.toFixed(2)}`);
+  if (head !== 'hull' && f.pipe > 0.02) hits.push(`pipe ${f.pipe.toFixed(2)}`);
+  if (head !== 'pipe') {
+    if (f.classes.ship_hull > 0.05) hits.push(`hull ${f.classes.ship_hull.toFixed(2)}`);
+    if (f.classes.propeller > 0.01) hits.push(`propeller ${f.classes.propeller.toFixed(2)}`);
+  }
   return hits;
 }
 

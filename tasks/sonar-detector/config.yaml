@@ -1,0 +1,20 @@
+# Sonar detector config (Phase 3).
+# YOLOv8 nano on SubPipe MiniSSS HF waterfall, 256px first, seed 42,
+# chrono split by filename timestamp. Never train on the eval split.
+
+data:
+  root: "data/SubPipeMiniSSS/DATA/SSS_HF_images"
+  image_size: 256
+  seed: 42
+  train_ratio: 0.7
+  val_ratio: 0.15  # rest is locked test
+
+model:
+  weights: "yolov8n.pt"
+  classes: ["Pipeline"]
+
+train:
+  epochs: 50
+  batch: 16
+  lr: 0.001
+  checkpoint_dir: "tasks/sonar-detector/checkpoints"
