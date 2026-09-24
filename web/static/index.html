@@ -55,8 +55,8 @@ async function poll() {
 function flagged(f) {
   const hits = [];
   if (f.pipe > 0.02) hits.push(`pipe ${f.pipe.toFixed(2)}`);
-  for (const [c, v] of Object.entries(f.classes))
-    if (v > 0.01 && c !== 'ship_hull') hits.push(`${c} ${v.toFixed(2)}`);
+  if (f.classes.ship_hull > 0.05) hits.push(`hull ${f.classes.ship_hull.toFixed(2)}`);
+  if (f.classes.propeller > 0.01) hits.push(`propeller ${f.classes.propeller.toFixed(2)}`);
   return hits;
 }
 
