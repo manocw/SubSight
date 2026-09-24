@@ -21,7 +21,11 @@ small run is defended.
 
 | Split | mAP50 | Notes |
 |---|---|---|
-| test (locked) | TBC | Scored once, never trained on |
+| val | 0.514 | 100 frames chrono, precision 0.78 recall 0.52 |
+| test (locked) | 0.859 | 101 frames chrono, precision 0.935 recall 0.708, scored once |
+
+YOLOv8n 3M params, 256px, 50 epochs, seed 42, batch 16.
+Test split runs easier than val, both reported as is.
 
 ## Next
 

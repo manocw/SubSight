@@ -138,7 +138,7 @@ All tasks (one repo, one toolkit):
 |---|---|---|---|
 | pipe-seg | SubPipe Chunk0 | Baseline done, Phase 1 hardening in progress | Val IoU 0.7459 / Dice 0.8368 (random, optimistic) |
 | hull-defect | LIACI (CC BY-NC-SA, SINTEF) | BCE-Dice 40ep, see tasks/hull-defect/ | Macro IoU 0.3969, hull 0.83, defect 0.0 (rare-class note kept) |
-| sonar | SubPipe MiniSSS HF (same Zenodo record) | YOLOv8n training, see tasks/sonar-detector/ | mAP50 TBC |
+| sonar | SubPipe MiniSSS HF (same Zenodo record) | YOLOv8n done, see tasks/sonar-detector/ | Test mAP50 0.859, P 0.935 R 0.708 |
 | enhance | UIEB + EUVP (TBC licence) | Spec only, see SPEC.md | — |
 | edge + demo | Jetson Orin Nano + UCL tow tank | Spec only, see SPEC.md | Latency vs accuracy curve TBC |
 
