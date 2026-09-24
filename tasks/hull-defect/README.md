@@ -51,6 +51,15 @@ Overlays (`outputs/eval.png`, anode/corrosion/peel/defect in colour):
 
 ![hull eval](outputs/eval.png)
 
+## Production
+
+Operator view is ship_hull at 0.5 plus propeller at 0.7.
+Hull 0.5 gives prec 0.92 rec 0.90. Propeller 0.7 gives prec
+0.74 rec 0.94, best IoU 0.71. Growth stays research: prec
+0.42 at 0.7 would add noise. Grating and valves score well
+but stay out of the demo lane until the pipe plus hull plus
+propeller trio is defended.
+
 ## Next
 
 - MobileNetV2 encoder per the paper's real-time pick

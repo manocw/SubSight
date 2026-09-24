@@ -22,7 +22,13 @@ model:
 
 train:
   batch_size: 8
-  epochs: 20
+  epochs: 40
   lr: 0.0003
+  loss: {name: bce_dice, dice_weight: 0.5}
   checkpoint_dir: "tasks/hull-defect/checkpoints"
   best_metric: "val_macro_iou"  # mean IoU over classes present in val
+
+production:
+  # Operator view: these classes flag. Rest are research, logged only.
+  classes: ["ship_hull", "propeller"]
+  thresholds: {ship_hull: 0.5, propeller: 0.7}
