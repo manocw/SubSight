@@ -51,11 +51,13 @@ def main() -> None:
           f"{len(splits['test'])} test (chrono).")
 
     work = Path(cfg["train"]["checkpoint_dir"]).parent / "yolo_data"
+    from PIL import Image  # .pbm waterfall frames -> .png, YOLO reads png
     for split, items in splits.items():
         (work / "images" / split).mkdir(parents=True, exist_ok=True)
         (work / "labels" / split).mkdir(parents=True, exist_ok=True)
         for img, ann in items:
-            shutil.copy(img, work / "images" / split / img.name)
+            Image.open(img).save(work / "images" / split /
+                                 (img.stem + ".png"))
             shutil.copy(ann, work / "labels" / split / (img.stem + ".txt"))
     data_yaml = work / "sss.yaml"
     yaml.safe_dump({"path": str(work.resolve()), "train": "images/train",
