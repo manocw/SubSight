@@ -27,18 +27,22 @@ from src.model import build_model  # noqa: E402
 
 FOCUS = ["anode", "corrosion", "paint_peel", "defect"]
 COLOURS = [(0, 0, 255), (0, 255, 255), (255, 0, 255), (255, 255, 0)]
+FULL_COLOURS = [(230, 25, 75), (60, 180, 75), (255, 225, 25),
+                (0, 130, 200), (245, 130, 48), (145, 30, 180),
+                (70, 240, 240), (240, 50, 230), (210, 245, 60),
+                (250, 190, 190)]
 
 _MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
 _STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 
 
 def overlay(frame_bgr: np.ndarray, masks: np.ndarray,
-            idx: list[int]) -> np.ndarray:
+            idx: list[int], colours: list = COLOURS) -> np.ndarray:
     out = frame_bgr.copy()
     for k, i in enumerate(idx):
         m = masks[i] > 0.5
         tint = np.zeros_like(out)
-        tint[m] = COLOURS[k]
+        tint[m] = colours[k]
         out = np.where(m[..., None],
                        (0.5 * out + 0.5 * tint).astype(np.uint8), out)
     return out
@@ -54,6 +58,8 @@ def main() -> None:
     ap.add_argument("--fps", type=int, default=5)
     ap.add_argument("--max-frames", type=int, default=60)
     ap.add_argument("--thresh", type=float, default=0.5)
+    ap.add_argument("--all-classes", action="store_true",
+                    help="Stamp all 10 classes instead of the 4-class focus.")
     args = ap.parse_args()
 
     ckpt = torch.load(args.checkpoint, map_location="cpu")
@@ -70,7 +76,11 @@ def main() -> None:
     names = sorted(val_names)[:args.max_frames]
     ds = LiaciDataset(cfg["data"]["root"], names,
                       get_val_transforms(tuple(cfg["data"]["image_size"])))
-    idx = [CLASSES.index(c) for c in FOCUS]
+    if args.all_classes:
+        show, colours = CLASSES, FULL_COLOURS
+    else:
+        show, colours = FOCUS, COLOURS
+    idx = [CLASSES.index(c) for c in show]
     h, w = cfg["data"]["image_size"]
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -84,7 +94,7 @@ def main() -> None:
         gt = gt_t.numpy() > 0.5
         rgb = np.moveaxis(img_t.numpy(), 0, -1) * _STD + _MEAN
         bgr = (np.clip(rgb, 0, 1) * 255).astype(np.uint8)[..., ::-1]
-        ov = overlay(overlay(bgr, gt, idx), pred, idx)
+        ov = overlay(overlay(bgr, gt, idx, colours), pred, idx, colours)
         inter = (pred & gt).sum(axis=(1, 2))
         union = (pred | gt).sum(axis=(1, 2))
         ious = np.where(union > 0, inter / np.maximum(union, 1), np.nan)
@@ -92,7 +102,7 @@ def main() -> None:
         lines = [f"macro {macro:.2f}"]
         for k, i in enumerate(idx):
             v = ious[i]
-            tag = f"{FOCUS[k][:6]} {v:.2f}" if not np.isnan(v) else f"{FOCUS[k][:6]} n/a"
+            tag = f"{show[k][:6]} {v:.2f}" if not np.isnan(v) else f"{show[k][:6]} n/a"
             lines.append(tag)
         for j, t in enumerate(lines):
             cv2.putText(ov, t, (10, 22 + 18 * j),
