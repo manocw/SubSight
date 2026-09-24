@@ -44,13 +44,17 @@ def read_split(root: str | Path) -> tuple[list[str], list[str]]:
 
 
 class LiaciDataset(Dataset):
-    """One image + stacked 10-channel mask. Mask (H,W,10) pre-tensor."""
+    """One image + stacked mask. Mask (H,W,C) for C in class_idx.
+    Default None keeps all 10 CLASSES (baseline contract)."""
 
     def __init__(self, root: str | Path, names: list[str],
-                 transform: A.Compose | None = None) -> None:
+                 transform: A.Compose | None = None,
+                 class_idx: list[int] | None = None) -> None:
         self.root = Path(root)
         self.names = names
         self.transform = transform
+        self.class_idx = class_idx if class_idx is not None else list(
+            range(len(CLASSES)))
 
     def __len__(self) -> int:
         return len(self.names)
@@ -61,10 +65,11 @@ class LiaciDataset(Dataset):
         img = cv2.imread(str(self.root / "images" / name), cv2.IMREAD_COLOR)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         chans = []
-        for c in CLASSES:
+        for i in self.class_idx:
+            c = CLASSES[i]
             m = np.array(Image.open(self.root / "masks" / c / (stem + ".bmp")))
             chans.append((m > 0).astype(np.float32))
-        mask = np.stack(chans, axis=-1)  # (H, W, 10)
+        mask = np.stack(chans, axis=-1)  # (H, W, C)
         if self.transform is not None:
             s = self.transform(image=img, mask=mask)
             img, mask = s["image"], s["mask"]
@@ -72,9 +77,9 @@ class LiaciDataset(Dataset):
             mask = torch.from_numpy(
                 np.ascontiguousarray(np.moveaxis(mask, -1, 0)))
         elif (isinstance(mask, torch.Tensor) and mask.ndim == 3
-                and mask.shape[0] != len(CLASSES)
-                and mask.shape[-1] == len(CLASSES)):
-            mask = mask.permute(2, 0, 1)  # (H, W, 10) -> (10, H, W)
+                and mask.shape[0] != len(self.class_idx)
+                and mask.shape[-1] == len(self.class_idx)):
+            mask = mask.permute(2, 0, 1)  # (H, W, C) -> (C, H, W)
         return img, mask.float()
 
 
@@ -113,14 +118,21 @@ def get_dataloaders(
     image_size: tuple[int, int] = (256, 256),
     batch_size: int = 8,
     num_workers: int = 2,
+    classes: list[str] | None = None,
 ) -> tuple[DataLoader, DataLoader, list[str], list[str]]:
-    """Train loader from official train list, val loader from test list."""
+    """Train loader from official train list, val loader from test list.
+    classes subsets the channels (default all 10, baseline contract)."""
+    names = classes if classes is not None else CLASSES
+    idx = [CLASSES.index(c) for c in names]
     train_names, test_names = read_split(root)
-    train_ds = LiaciDataset(root, train_names, get_train_transforms(image_size))
-    val_ds = LiaciDataset(root, test_names, get_val_transforms(image_size))
+    train_ds = LiaciDataset(root, train_names,
+                            get_train_transforms(image_size), idx)
+    val_ds = LiaciDataset(root, test_names,
+                          get_val_transforms(image_size), idx)
     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True,
                               num_workers=num_workers, pin_memory=True)
     val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False,
                             num_workers=num_workers, pin_memory=True)
     print(f"LIACI: {len(train_ds)} train / {len(val_ds)} val (official split).")
+    print(f"Channels: {names}")
     return train_loader, val_loader, train_names, test_names

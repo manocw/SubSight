@@ -104,19 +104,21 @@ def train_one_epoch(model, loader, criterion, optimizer, device):
 
 
 @torch.no_grad()
-def validate(model, loader, criterion, device):
-    """Returns loss, per-class IoU, per-class Dice (nan if class absent)."""
+def validate(model, loader, criterion, device, n_classes=None):
+    """Returns loss, per-class IoU, per-class Dice (nan if class absent).
+    n_classes defaults to 10 for old callers (evaluate, sweep)."""
+    n = n_classes if n_classes is not None else len(CLASSES)
     model.eval()
-    tot, n = 0.0, 0
-    inter = torch.zeros(len(CLASSES), device=device)
-    union = torch.zeros(len(CLASSES), device=device)
-    pred_sum = torch.zeros(len(CLASSES), device=device)
-    true_sum = torch.zeros(len(CLASSES), device=device)
+    tot, m = 0.0, 0
+    inter = torch.zeros(n, device=device)
+    union = torch.zeros(n, device=device)
+    pred_sum = torch.zeros(n, device=device)
+    true_sum = torch.zeros(n, device=device)
     for images, masks in tqdm(loader, desc="val", leave=False):
         images, masks = images.to(device), masks.to(device)
         logits = model(images)
         tot += criterion(logits, masks).item() * images.size(0)
-        n += images.size(0)
+        m += images.size(0)
         preds = (torch.sigmoid(logits) > 0.5).float()
         tgt = (masks > 0.5).float()
         inter += (preds * tgt).sum(dim=(0, 2, 3))
@@ -129,7 +131,7 @@ def validate(model, loader, criterion, device):
     dice = torch.where(union > 0,
                        2 * inter / (pred_sum + true_sum + eps),
                        torch.full_like(inter, float("nan")))
-    return tot / n, iou.cpu(), dice.cpu()
+    return tot / m, iou.cpu(), dice.cpu()
 
 
 def main() -> None:
@@ -144,25 +146,29 @@ def main() -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
 
+    # Subset cut: data.classes overrides the 10-class contract.
+    # Absent key keeps the baseline exact.
+    subset = cfg["data"].get("classes", CLASSES)
     train_loader, val_loader, _, _ = get_dataloaders(
         root=cfg["data"]["root"],
         image_size=tuple(cfg["data"]["image_size"]),
         batch_size=cfg["train"]["batch_size"],
         num_workers=cfg["data"]["num_workers"],
+        classes=subset,
     )
     model = build_model(
         architecture=cfg["model"].get("architecture", "unet"),
         encoder=cfg["model"].get("encoder", "resnet34"),
         encoder_weights=cfg["model"].get("encoder_weights", "imagenet"),
         in_channels=3,
-        classes=len(CLASSES),
+        classes=len(subset),
     ).to(device)
     total, trainable = count_parameters(model)
     print(f"Model params={total:,} trainable={trainable:,}")
 
-    # (1,10,1,1): broadcasts over (B,10,H,W). A flat (10,) would
-    # align to W and blow up, which is exactly what happened on Kaggle.
-    pos_weight = torch.tensor(POS_WEIGHT, device=device).view(1, -1, 1, 1)
+    # (1,C,1,1): broadcasts over (B,C,H,W). Weights follow the subset.
+    sub_w = [POS_WEIGHT[CLASSES.index(c)] for c in subset]
+    pos_weight = torch.tensor(sub_w, device=device).view(1, -1, 1, 1)
     criterion = build_criterion(cfg, pos_weight)
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg["train"]["lr"])
 
@@ -173,12 +179,12 @@ def main() -> None:
         tr_loss = train_one_epoch(model, train_loader, criterion,
                                   optimizer, device)
         va_loss, va_iou, va_dice = validate(model, val_loader, criterion,
-                                            device)
+                                             device, len(subset))
         macro = float(torch.nanmean(va_iou))
         print(f"epoch {epoch:02d}/{cfg['train']['epochs']} "
               f"train loss={tr_loss:.4f} | val loss={va_loss:.4f} "
               f"macro IoU={macro:.4f}")
-        for c, v in zip(CLASSES, va_iou.tolist()):
+        for c, v in zip(subset, va_iou.tolist()):
             print(f"    {c}: IoU={v:.4f}")
         torch.save(
             {"epoch": epoch, "model": model.state_dict(),
