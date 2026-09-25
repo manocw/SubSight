@@ -4,9 +4,9 @@ Run from repo root:
     python tasks/hull-defect/src/make_video.py --checkpoint \
         tasks/hull-defect/checkpoints/best.pth --max-frames 60
 
-Left = raw image, right = overlay (anode red, corrosion yellow,
-peel magenta, defect cyan). Val frames in filename order with
-per-frame macro IoU stamped on.
+Left = raw image, right = overlay. Val frames in filename order with
+per-frame macro IoU stamped on. Channel order comes from the
+checkpoint config data.classes, else 10.
 """
 
 import argparse
@@ -42,7 +42,7 @@ def overlay(frame_bgr: np.ndarray, masks: np.ndarray,
     for k, i in enumerate(idx):
         m = masks[i] > 0.5
         tint = np.zeros_like(out)
-        tint[m] = colours[k]
+        tint[m] = colours[k % len(colours)]
         out = np.where(m[..., None],
                        (0.5 * out + 0.5 * tint).astype(np.uint8), out)
     return out
@@ -59,28 +59,34 @@ def main() -> None:
     ap.add_argument("--max-frames", type=int, default=60)
     ap.add_argument("--thresh", type=float, default=0.5)
     ap.add_argument("--all-classes", action="store_true",
-                    help="Stamp all 10 classes instead of the 4-class focus.")
+                    help="Stamp all checkpoint classes instead of focus.")
     args = ap.parse_args()
 
     ckpt = torch.load(args.checkpoint, map_location="cpu")
     cfg = ckpt.get("config", yaml.safe_load(open(args.config)))
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # Channel order is the contract: config data.classes, else 10 fallback.
+    channels = cfg["data"].get("classes", CLASSES)
     model = build_model(
         architecture=cfg["model"].get("architecture", "unet"),
         encoder=cfg["model"].get("encoder", "resnet34"),
-        encoder_weights=None, in_channels=3, classes=len(CLASSES))
+        encoder_weights=None, in_channels=3, classes=len(channels))
     model.load_state_dict(ckpt["model"])
     model.to(device).eval()
 
     _, val_names = read_split(cfg["data"]["root"])
     names = sorted(val_names)[:args.max_frames]
+    class_idx = [CLASSES.index(c) for c in channels]
     ds = LiaciDataset(cfg["data"]["root"], names,
-                      get_val_transforms(tuple(cfg["data"]["image_size"])))
+                      get_val_transforms(tuple(cfg["data"]["image_size"])),
+                      class_idx)
     if args.all_classes:
-        show, colours = CLASSES, FULL_COLOURS
+        show, colours = channels, FULL_COLOURS[:len(channels)]
     else:
-        show, colours = FOCUS, COLOURS
-    idx = [CLASSES.index(c) for c in show]
+        focus = [c for c in FOCUS if c in channels]
+        show = focus if focus else channels
+        colours = COLOURS[:len(show)]
+    idx = [channels.index(c) for c in show]
     h, w = cfg["data"]["image_size"]
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)

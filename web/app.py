@@ -31,16 +31,18 @@ TRANSCRIPTS = DATA / "transcripts"
 DB = DATA / "jobs.db"
 SAMPLE_FPS = 2.0
 THRESHOLDS = {"pipe": 0.02, "macro": 0.05}
+# Cover-flag thresholds. Heuristic, not sweep measured: the sweep
+# measured pixel prec/rec, not cover rates. TBC with a cover sweep.
+# Source of truth for the viewer; index.html mirrors these values.
 FLAG_THRESH = {"pipe": 0.02, "ship_hull": 0.05, "propeller": 0.01}
 
-CLASSES = ["ship_hull", "anode", "marine_growth", "paint_peel", "corrosion",
-           "defect", "propeller", "sea_chest_grating", "over_board_valves",
-           "bilge_keel"]
+CLASSES = ["ship_hull", "propeller", "sea_chest_grating"]
 
-# Per-pixel sigmoid thresholds from the Kaggle val sweep. Production
-# classes only: hull 0.5 (prec 0.92), propeller 0.7 (prec 0.74).
-# Rest use 0.5, logged but never flagged in the operator view.
-SIGMOID_THRESH = {"ship_hull": 0.5, "propeller": 0.7}
+# Per-pixel sigmoid thresholds from the val sweep. Operator flags
+# hull 0.5 plus propeller 0.7. Grating uses 0.5, logged but never
+# flagged in the operator view.
+SIGMOID_THRESH = {"ship_hull": 0.5, "propeller": 0.7,
+                  "sea_chest_grating": 0.5}
 PROD_CLASSES = ["ship_hull", "propeller"]
 
 _MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
@@ -81,9 +83,9 @@ class StubPredictor:
         yy, xx = np.mgrid[:h, :w]
         blob = ((xx - w // 2) ** 2 + (yy - h // 2) ** 2) < (h // 4) ** 2
         cov = float(blob.mean())
-        return {"pipe": cov, "macro": cov / 10,
-                "classes": {c: (cov / 10 if i else 0.0)
-                            for i, c in enumerate(CLASSES)}}
+        cov3 = {c: cov / 3 for c in CLASSES}
+        macro = float(np.mean([cov3[c] for c in PROD_CLASSES]))
+        return {"pipe": cov, "macro": macro, "classes": cov3}
 
     def masks(self, frame: np.ndarray) -> dict:
         h, w, _ = frame.shape
@@ -110,6 +112,10 @@ class OnnxPredictor:
         pipe = float((sigmoid(self.pipe.run(None, {"input": x})[0])
                       > 0.5).mean())
         probs = sigmoid(self.hull.run(None, {"input": x})[0][0])
+        if probs.shape[0] != len(CLASSES):
+            raise RuntimeError(
+                f"hull.onnx has {probs.shape[0]} chans, app wants "
+                f"{len(CLASSES)} {CLASSES}. Re-export from prod3.")
         cov = {c: float((probs[i] > SIGMOID_THRESH.get(c, 0.5)).mean())
                for i, c in enumerate(CLASSES)}
         macro = float(np.mean([cov[c] for c in PROD_CLASSES]))
@@ -124,14 +130,18 @@ class OnnxPredictor:
         out["pipe"] = (sigmoid(self.pipe.run(None, {"input": x})[0][0])
                        > 0.5)[0]
         probs = sigmoid(self.hull.run(None, {"input": x})[0][0])
+        if probs.shape[0] != len(CLASSES):
+            raise RuntimeError(
+                f"hull.onnx has {probs.shape[0]} chans, app wants "
+                f"{len(CLASSES)} {CLASSES}. Re-export from prod3.")
         for c in ("ship_hull", "propeller"):
             out[c] = probs[CLASSES.index(c)] > SIGMOID_THRESH[c]
         return out
 
 
 def hits_for(entry: dict, head: str = "both") -> list:
-    """Production trio only. Research classes never flag. Head gates
-    which job scores: pipe surveys never fire hull flags and reverse."""
+    """Operator trio only: pipe, hull, propeller. Grating is logged
+    in scores but never flags. Head gates pipe vs hull jobs."""
     hits = []
     if head in ("both", "pipe") and entry.get("pipe", 0) > FLAG_THRESH["pipe"]:
         hits.append(f"pipe {entry['pipe']:.2f}")

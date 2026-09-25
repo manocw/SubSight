@@ -3,10 +3,13 @@
 Run from repo root:
     python tasks/hull-defect/src/sweep_thresholds.py --checkpoint \
         tasks/hull-defect/checkpoints_bce_dice_40/best.pth
+    python tasks/hull-defect/src/sweep_thresholds.py --checkpoint \
+        tasks/hull-defect/checkpoints_prod3/best.pth --classes \
+        ship_hull,propeller,sea_chest_grating
 
-Default classes are the shippable subset: ship_hull, propeller.
-Research classes stay out of the operator view. Prints per-threshold
-precision, recall, IoU so thresholds are picked from val, not guessed.
+Channel order comes from the checkpoint config data.classes, else 10.
+Prints per-threshold precision, recall, IoU so thresholds are picked
+from val, not guessed.
 """
 
 import argparse
@@ -46,7 +49,8 @@ def main() -> None:
                     default="tasks/hull-defect/checkpoints_bce_dice_40/best.pth")
     ap.add_argument("--config", default="tasks/hull-defect/config.yaml")
     ap.add_argument("--thresholds", default="0.3,0.5,0.7")
-    ap.add_argument("--classes", default="ship_hull,propeller")
+    ap.add_argument("--classes",
+                    default="ship_hull,propeller,sea_chest_grating")
     args = ap.parse_args()
 
     ckpt_path = find_checkpoint(args.checkpoint)
@@ -56,10 +60,13 @@ def main() -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Checkpoint: {ckpt_path} (epoch {ckpt.get('epoch', '?')})")
 
+    # Channel order is the contract: config data.classes, else 10 fallback.
+    channels = cfg["data"].get("classes", CLASSES)
+
     model = build_model(
         architecture=cfg["model"].get("architecture", "unet"),
         encoder=cfg["model"].get("encoder", "resnet34"),
-        encoder_weights=None, in_channels=3, classes=len(CLASSES))
+        encoder_weights=None, in_channels=3, classes=len(channels))
     model.load_state_dict(ckpt["model"])
     model.to(device).eval()
 
@@ -68,10 +75,15 @@ def main() -> None:
         image_size=tuple(cfg["data"]["image_size"]),
         batch_size=cfg["train"]["batch_size"],
         num_workers=cfg["data"]["num_workers"],
+        classes=channels,
     )
     thresh = [float(t) for t in args.thresholds.split(",")]
     want = [c.strip() for c in args.classes.split(",") if c.strip()]
-    idx = [CLASSES.index(c) for c in want]
+    missing = [c for c in want if c not in channels]
+    if missing:
+        raise ValueError(f"Classes {missing} not in checkpoint channels "
+                         f"{channels}.")
+    idx = [channels.index(c) for c in want]
 
     tp = torch.zeros(len(want), len(thresh))
     fp = torch.zeros(len(want), len(thresh))

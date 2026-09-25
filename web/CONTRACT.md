@@ -5,14 +5,17 @@
 | File | Input | Output |
 |---|---|---|
 | pipe.onnx | (1,3,256,256) float32, RGB, ImageNet-normalized | (1,1,256,256) float32 logits |
-| hull.onnx | (1,3,256,256) float32, RGB, ImageNet-normalized | (1,10,256,256) float32 logits |
+| hull.onnx | (1,3,256,256) float32, RGB, ImageNet-normalized | (1,3,256,256) float32 logits |
 
-Hull channel order (fixed): ship_hull, anode, marine_growth,
-paint_peel, corrosion, defect, propeller, sea_chest_grating,
-over_board_valves, bilge_keel.
+Hull channel order (fixed, equals prod3 config data.classes):
+ship_hull, propeller, sea_chest_grating.
 
-Produced by web/export_onnx.py on a GPU box from the .pth
-checkpoints. The web app never trains and never imports torch.
+Produced by web/export_onnx.py on a GPU box from checkpoints/best.pth
+(pipe) and tasks/hull-defect/checkpoints_prod3/best.pth (hull). The
+10ch file in tasks/hull-defect/checkpoints_bce_dice_40/best.pth stays
+on disk as fallback and is never overwritten. The web app never
+trains and never imports torch. A 10ch hull.onnx is rejected with a
+clear error, re-export from prod3.
 
 ## Scores file (one per uploaded video)
 
@@ -23,17 +26,18 @@ checkpoints. The web app never trains and never imports torch.
   "fps": 2.0,
   "frames": [
     {"t": 0.0, "pipe": 0.11, "macro": 0.21,
-     "classes": {"anode": 0.0, "corrosion": 0.03}},
+     "classes": {"ship_hull": 0.40, "propeller": 0.02,
+                 "sea_chest_grating": 0.03}},
     "... one entry per sampled frame, t in video seconds ..."
   ]
 }
 ```
 
 Values are predicted-positive pixel fractions per class (plus pipe
-and macro). Macro is the mean over production classes only
-(ship_hull, propeller). A frame is flagged when a production value
-tops its threshold: pipe 0.02, ship_hull 0.05, propeller 0.01.
-Research classes are logged in the scores file, never flagged.
+and macro). Macro is the mean over the operator pair
+(ship_hull, propeller). Grating is logged in the scores file, never
+flagged. A frame is flagged when an operator value tops its
+threshold: pipe 0.02, ship_hull 0.05, propeller 0.01.
 
 ## Endpoints (web/app.py)
 

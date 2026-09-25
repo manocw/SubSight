@@ -66,6 +66,7 @@ async function poll() {
 }
 
 function flagged(f) {
+  // Mirrors FLAG_THRESH in web/app.py. Edit both together.
   const head = $('head').value;
   const hits = [];
   if (head !== 'hull' && f.pipe > 0.02) hits.push(`pipe ${f.pipe.toFixed(2)}`);

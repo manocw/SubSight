@@ -4,8 +4,8 @@ Run from repo root:
     python tasks/hull-defect/src/evaluate.py --checkpoint \
         tasks/hull-defect/checkpoints/best.pth --num-images 4
 
-Figure: input | ground truth (rare channels) | prediction (rare
-channels). Rare = anode, corrosion, paint peel, defect.
+Figure: input | ground truth | prediction on the checkpoint channels.
+Channel order comes from the checkpoint config data.classes, else 10.
 """
 
 import argparse
@@ -53,7 +53,7 @@ def overlay_multi(img: np.ndarray, masks: np.ndarray,
     for k, i in enumerate(idx):
         m = masks[i] > 0.5
         tint = np.zeros_like(out)
-        tint[m] = COLOURS[k]
+        tint[m] = COLOURS[k % len(COLOURS)]
         out = np.where(m[..., None], 0.5 * out + 0.5 * tint, out)
     return out
 
@@ -74,12 +74,15 @@ def main() -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Checkpoint: {args.checkpoint} (epoch {ckpt.get('epoch', '?')})")
 
+    # Channel order is the contract: config data.classes, else 10 fallback.
+    channels = cfg["data"].get("classes", CLASSES)
+
     model = build_model(
         architecture=cfg["model"].get("architecture", "unet"),
         encoder=cfg["model"].get("encoder", "resnet34"),
         encoder_weights=None,
         in_channels=3,
-        classes=len(CLASSES),
+        classes=len(channels),
     )
     model.load_state_dict(ckpt["model"])
     model.to(device).eval()
@@ -89,18 +92,23 @@ def main() -> None:
         image_size=tuple(cfg["data"]["image_size"]),
         batch_size=cfg["train"]["batch_size"],
         num_workers=cfg["data"]["num_workers"],
+        classes=channels,
     )
+    sub_w = [pos_weight[CLASSES.index(c)] for c in channels]
     criterion = nn.BCEWithLogitsLoss(
-        pos_weight=torch.tensor(pos_weight, device=device).view(1, -1, 1, 1))
-    _, va_iou, va_dice = validate(model, val_loader, criterion, device)
+        pos_weight=torch.tensor(sub_w, device=device).view(1, -1, 1, 1))
+    _, va_iou, va_dice = validate(model, val_loader, criterion, device,
+                                  len(channels))
     print(f"{'class':<18}{'IoU':>8}{'Dice':>8}")
-    for c, i, d in zip(CLASSES, va_iou.tolist(), va_dice.tolist()):
+    for c, i, d in zip(channels, va_iou.tolist(), va_dice.tolist()):
         print(f"{c:<18}{i:>8.4f}{d:>8.4f}")
     macro = float(torch.nanmean(va_iou))
     print(f"{'macro (present)':<18}{macro:>8.4f}")
 
-    # Figure on first N val images: rare-channel overlays.
-    idx = [CLASSES.index(c) for c in FOCUS]
+    # Figure on first N val images: focus channels if present, else all.
+    idx = [channels.index(c) for c in FOCUS if c in channels]
+    if not idx:
+        idx = list(range(len(channels)))
     batches = next(iter(val_loader))
     nimgs = min(args.num_images, batches[0].size(0))
     logits = model(batches[0][:nimgs].to(device))
@@ -114,7 +122,8 @@ def main() -> None:
         axes[r][0].imshow(img)
         axes[r][0].set_title("input")
         axes[r][1].imshow(overlay_multi(img, gts[r], idx))
-        axes[r][1].set_title("truth (anode/corrosion/peel/defect)")
+        axes[r][1].set_title("truth (" + "/".join(
+            [channels[i] for i in idx]) + ")")
         axes[r][2].imshow(overlay_multi(img, probs[r] > 0.5, idx))
         axes[r][2].set_title("prediction (same colours)")
         for ax in axes[r]:
